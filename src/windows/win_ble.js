@@ -1,4 +1,4 @@
-﻿//var app = WinJS.Application;
+//var app = WinJS.Application;
 var bluetooth = Windows.Devices.Bluetooth;
 var gatt = Windows.Devices.Bluetooth.GenericAttributeProfile;
 var crypto = Windows.Security.Cryptography;
@@ -23,7 +23,7 @@ var characteristicCollection = [];
 var listObj = {
     deviceID: "",
     selectedCharacteristic: {}
-}
+};
 
 var listeners = [];
 
@@ -133,7 +133,7 @@ function getSelectedCharacteristicUuid( uuid, guid, callback ) {
                 svc.services[0].getCharacteristicsForUuidAsync( guid ).done(
                     function ( charc ) {
                         if ( charc.characteristics.length > 0 ) {
-                            var selectedCharacteristic = charc.characteristics[0]
+                            var selectedCharacteristic = charc.characteristics[0];
                             callback( selectedCharacteristic );
                         } else {
                             callback( false );
@@ -151,7 +151,7 @@ function getListeners(deviceID) {
 
     for ( var i = 0; i < len; i++ ) {
         var listObj = listeners[i];
-        if ( listObj.deviceID = deviceID ) {
+        if ( listObj.deviceID === deviceID ) {
             return listObj.selectedCharacteristic;
         }
     }
@@ -162,7 +162,7 @@ function removeListener( deviceID ) {
     var len = listeners.length;
 
     for ( var i = 0; i < len; i++ ) {
-        if ( listeners[i].deviceID = deviceID ) {
+        if ( listeners[i].deviceID === deviceID ) {
             listeners.splice( i, 1 );
         }
     }
