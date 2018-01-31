@@ -25,7 +25,7 @@
     "nBlue",
     "ecosystem:cordova"
   ],
-  "author": "Buck Taylor <buck_taylor@hotmail.com>",
+  "author": "Buck Taylor <buck@roltay.com>",
   "license": "Apache-2.0",
   "bugs": {
     "url": "http://app.imanifold.com:2443/cordova-plugin-ble-npi/issues"
