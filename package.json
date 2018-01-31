@@ -1,0 +1,34 @@
+{
+  "name": "cordova-plugin-ble-npi",
+  "version": "1.0.1",
+  "description": "Bluetooth Loe-Energy Communication Plugin",
+  "cordova": {
+    "id": "cordova-plugin-ble-npi",
+    "platforms": [
+      "android",
+      "ios",
+      "wp8",
+      "windows",
+      "browser"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+http://app.imanifold.com:2443/cordova-plugin-ble-npi.git"
+  },
+  "keywords": [
+    "cordova",
+    "bluetooth",
+    "serial",
+    "ble",
+    "arduino",
+    "nBlue",
+    "ecosystem:cordova"
+  ],
+  "author": "Buck Taylor <buck_taylor@hotmail.com>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "http://app.imanifold.com:2443/cordova-plugin-ble-npi/issues"
+  },
+  "homepage": "https://app.imanifold.com:2443/cordova-plugin-ble-npi#readme"
+}
