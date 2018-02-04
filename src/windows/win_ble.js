@@ -1,8 +1,7 @@
-//var app = WinJS.Application;
+
 var bluetooth = Windows.Devices.Bluetooth;
 var deviceInfo = Windows.Devices.Enumeration.DeviceInformation;
 var gatt = Windows.Devices.Bluetooth.GenericAttributeProfile;
-//var wsc = Windows.Security.Cryptography;
 
 var serviceInitialized = false;
 
@@ -13,6 +12,7 @@ var isEnumerationComplete = false;
 var WATCH_CACHE = {};
 var LISTEN_CACHE = {};
 
+var serviceUuidFilter = null;
 var successFn;
 var failureFn;
 
@@ -21,19 +21,23 @@ var notifyCallback;
 var scanTimer;
 var connectTimer;
 
-var isInitialized = false;
-
 // *** DEVICE ENUMERATION SECTION ***
-function initializeDevice( success, failure ) {
-    //var selector = "System.Devices.InterfaceClassGuid:=\"{6E3BB679-4372-40C8-9EAA-4509DF260CD8}\" AND System.Devices.InterfaceEnabled:=System.StructuredQueryType.Boolean#True";
-    //var selector = "System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\""
-    var selector = Windows.Devices.Bluetooth.BluetoothLEDevice.getDeviceSelectorFromConnectionStatus( false );
 
-    deviceInfo.findAllAsync( selector, null ).done(
+function initializeDevice( selector, success, failure ) {
+
+    var selector1 = "System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\"";
+
+    var kind = Windows.Devices.Enumeration.DeviceInformationKind.associationEndpoint;
+    var reqProperties = [];
+    reqProperties[0] = "System.Devices.Aep.DeviceAddress";
+    reqProperties[1] = "System.Devices.Aep.IsConnected";
+    reqProperties[2] = "System.Devices.Aep.SignalStrength";
+
+    deviceInfo.findAllAsync( selector1, reqProperties ).then(
         function ( devices ) {
             if ( devices.length > 0 ) {
                 isInitialized = true;
-                success( true );
+                success( devices[0] );
             } else {
                 failure( { error: "initialize", message: "No BLE devices found." } );
             }
@@ -43,37 +47,26 @@ function initializeDevice( success, failure ) {
         } );
 }
 
-function startWatcher() {
+function startWatcher( selector ) {
     var DeviceWatcherStatus = Windows.Devices.Enumeration.DeviceWatcherStatus;
     // Get the device selector chosen by the UI then add additional constraints for devices that 
     // can be paired or are already paired.
 
-    var selectedItem = {
-        displayName: "Bluetooth LE",
-        selectorBLE: "System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\"",
-        selectorBT: "System.Devices.Aep.ProtocolId:=\"{e0cbf06c-cd8b-4647-bb8a-263b43f0f974}\"",
-        kind: Windows.Devices.Enumeration.DeviceInformationKind.associationEndpoint
-    };
-    //var selector = "(" + selectedItem.selectorBLE + ")";
-    var selector = selectedItem.selectorBLE;
-    //var selector = Windows.Devices.Bluetooth.BluetoothLEDevice.getDeviceSelectorFromConnectionStatus( false );
+    var kind = Windows.Devices.Enumeration.DeviceInformationKind.associationEndpoint;
 
     var reqProperties = [];
     reqProperties[0] = "System.Devices.Aep.DeviceAddress";
     reqProperties[1] = "System.Devices.Aep.IsConnected";
     reqProperties[2] = "System.Devices.Aep.SignalStrength";
 
-    // Drop cache first
-    //deviceArray = [];
 
     if ( !deviceWatcher ) {
-        deviceWatcher = DevEnum.DeviceInformation.createWatcher( selector, reqProperties, selectedItem.kind );
-        //deviceWatcher = DevEnum.DeviceInformation.createWatcher();
+        deviceWatcher = DevEnum.DeviceInformation.createWatcher( selector, reqProperties, kind );
 
         // Add event handlers
         deviceWatcher.addEventListener( "added", onAdded, false );
         deviceWatcher.addEventListener( "updated", onUpdated, false );
-        deviceWatcher.addEventListener( "removed", onRemoved, false );
+        //deviceWatcher.addEventListener( "removed", onRemoved, false );
         deviceWatcher.addEventListener( "enumerationcompleted", onEnumerationCompleted, false );
         deviceWatcher.addEventListener( "stopped", onStopped, false );
 
@@ -113,7 +106,7 @@ function stopWatcher() {
             DevEnum.DeviceWatcherStatus.enumerationCompleted === deviceWatcher.status ) {
             deviceWatcher.stop();
             deviceWatcher = undefined;
-            console.log( "Watcher stopped..." );
+            console.log( "Watcher stopped..." )
         }
 
     }
@@ -134,7 +127,7 @@ function onAdded( devinfo ) {
     var rssi = 0;
 
     if ( !devinfo.name ) {
-        thisDevice.name = "Unknown";
+        thisDevice.name = "Unknown"
     }
 
     //Initialize our BLE object
@@ -145,64 +138,45 @@ function onAdded( devinfo ) {
             WATCH_CACHE[devinfo.id].device = devinfo;
             WATCH_CACHE[devinfo.id].ble = {};
             WATCH_CACHE[devinfo.id].services = {}; //.characteristics = {}; .descriptors
-            console.log( "onAdded: found a device: " + devinfo.name + " Device isEnabled: " + devinfo.isEnabled );
+            console.log( "Enumeration found: " + devinfo.name + "  >>>  " + devinfo.id );
         }
     }
 
     function searchForUuid() {
 
-        function checkUuid() {
-            WATCH_CACHE[thisDevice.id].ble.getGattServicesForUuidAsync( uuid ).done(
+        function checkUuid( bleDevice ) {
+
+            WATCH_CACHE[devinfo.id].ble = bleDevice;
+
+            if ( devinfo.name === "Unknown" ) {
+                WATCH_CACHE[devinfo.id].deviceInfo.name = bleDevice.name;
+            }
+
+            WATCH_CACHE[devinfo.id].ble.getGattServicesForUuidAsync( serviceUuidFilter ).done(
                 function ( result ) {
-                    if ( result.status === 0 ) {
-                        if ( scanTimer ) { clearTimeout( scanTimer ); }
-                        WATCH_CACHE[thisDevice.id].services[uuid] = result.service[0];
-                        if ( devinfo.name === "Name Not Discovered" ) {
-                            devinfo.name = c_device.name;
+                    if ( result.status === gatt.GattCommunicationStatus.success ) {
+                        var services = result.services;
+                        if ( result.services.length > 0 ) {
+                            console.log( "Searching ServiceUuid: {" + services[0].uuid + "} - found a device: " + bleDevice.name );
+                            if ( scanTimer ) { clearTimeout( scanTimer ); }
+                            stopWatcher();
+                            returnDevice();
+                        } else {
+                            console.log( "Device: " + bleDevice.name + " did not return a match" );
                         }
-                        console.log( "Search for Uuid: found a device: " + WATCH_CACHE[thisDevice.id].ble.name );
-                        stopWatcher();
-                        returnDevice();
                     }
                 },
                 function ( error ) {
-                    console.log( "Error in searching gattUUID: " + error );
+                    console.log( "Failure getting GATT for: " + bleDevice.name );
                 }
             );
         }
 
-        function failedBLE() {
-            Console.log( "Not a valid BLE device" );
-        }
-
-        getBLE( deviceID, checkUuid, returnDevice );
+        getBLE( devinfo.id, checkUuid, returnDevice );
     }
 
-    function failServices( error ) {
-        console.log( "Failed to find services during enumeration: " + error );
-    }
-
-    function successServices( result ) {
-        console.log( "Success in setting up services: " + result );
-    }
-
-    function getServices( BLE ) {
-        var cacheMode = bluetooth.BluetoothCacheMode.uncached;
-        getGATTServices( BLE, cacheMode, successServices, failServices );
-    }
-
-    function returnDevice( services ) {
-        if ( !WATCH_CACHE[devinfo.id] ) { init(); }
-
-        if ( services ) {
-            console.log( services );
-            var i = 0;
-            for ( var svc in services ) {
-                thisDevice.advertising.services[i] = svc;
-                i++;
-            }
-            cacheGattServices( WATCH_CACHE[devinfo.id].services, services );
-        }
+    function returnDevice() {
+        //if ( !WATCH_CACHE[devinfo.id] ) { init(); }
 
         if ( devinfo.properties['System.Devices.Aep.SignalStrength'] !== null ) {
             WATCH_CACHE[devinfo.id].rssi = devinfo.properties['System.Devices.Aep.SignalStrength'];
@@ -212,8 +186,13 @@ function onAdded( devinfo ) {
     }
 
     init();
-    //getBLE( devinfo.id, getServices, failServices );
-    returnDevice();
+
+    if ( serviceUuidFilter !== null ) {
+        searchForUuid();
+    } else {
+        returnDevice();
+    }
+
 }
 
 function onUpdated( devUpdate ) {
@@ -248,10 +227,22 @@ function onStopped( obj ) {
 
 //**GATT Functions
 
-function getDeviceSelectorFromUuid( serviceUuid ) {
+function getDeviceSelectorFromUuid( serviceUuidFilter ) {
     //Creates a suitable AQS Filter string for use with the CreateWatcher method, from a Bluetooth service UUID.
-    var string = gatt.GattDeviceService.getDeviceSelectorFromUuid( serviceUuid );
+    var string = gatt.GattDeviceService.getDeviceSelectorFromUuid( serviceUuidFilter );
     return string;
+}
+
+function getSelector( serviceUuidFilter ) {
+    //Creates the AQS filter for deviceWatcher
+    var selector = "System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\""; //BLE
+    //var selector = "System.Devices.Aep.ProtocolId:=\"{e0cbf06c-cd8b-4647-bb8a-263b43f0f974}\""; //Bluetooth
+
+    if ( serviceUuidFilter && serviceUuidFilter !== null ) {
+        selector = getDeviceSelectorFromUuid( serviceUuidFilter );
+    }
+
+    return selector;
 }
 
 function pairDevice( deviceID, success, failure ) {
@@ -305,7 +296,7 @@ function setBLEStatusListener( bleDevice, success, failure ) {
 function getBLE( deviceID, success, failure ) {
     bluetooth.BluetoothLEDevice.fromIdAsync( deviceID ).done(
         function ( bleDevice ) {
-            console.log( "BluetoothLeDevice object created" );
+            //console.log( "BluetoothLeDevice object created" );
             success( bleDevice );
         },
         function ( error ) {
@@ -447,21 +438,28 @@ function ua2hex( ua ) {
 module.exports = {
 
     scan: function ( success, failure, args ) {
-        serviceFilter = args[0];
+        serviceUuidFilter = null;
         var scanTime = args[1] * 1000;
+
         successFn = success;
         failureFn = failure;
+        WATCH_CACHE = {};
 
-        function continueScan( result ) {
-            startWatcher();
+
+        if ( args[0] && args[0].length > 0 ) {
+            serviceUuidFilter = "{" + args[0].toString() + "}";
+        }
+
+        selector = getSelector(); //serviceUuidFilter 
+        startWatcher( selector );
+
+        if ( scanTime && scanTime > 0 ) {
             scanTimer = setTimeout(
                 function () {
                     stopWatcher();
                 }, scanTime );
         }
 
-        //startWatcher();
-        continueScan( true );
     },
 
     startScan: function ( success, failure, svcs ) {
@@ -505,38 +503,21 @@ module.exports = {
         }
         console.log( "Attempting to connect..." );
 
-        function CharSuccess( deviceID ) {
-            listen( deviceID );
-            return;
-        }
-
-        function getCharac( deviceID ) {
-            for ( var uuid in WATCH_CACHE[deviceID].services ) {
-                getServiceCharacteristics( deviceID, uuid, CharSuccess );
-            }
-        }
-
-        function pair( deviceID ) {
-            pairDevice( deviceID, gatt, failure )
-        }
 
         function cacheGatt( services ) { //Step 3 
-            cacheGattServices( WATCH_CACHE[deviceID].services, services ); //Cache services for fast reference         
+            cacheGattServices( WATCH_CACHE[deviceID].services, services ); //Cache services for fast reference
+            setBLEStatusListener( WATCH_CACHE[deviceID].ble, success, failure );
         }
 
         function gatt( bleDevice ) { //Step 2
             WATCH_CACHE[deviceID].ble = bleDevice; //Cache device for reference  
             getGATTServices( bleDevice, bluetooth.BluetoothCacheMode.uncached, cacheGatt, failure );
-            setBLEStatusListener( bleDevice, success, failure );
         }
 
+
         if ( WATCH_CACHE[deviceID].ble.deviceId ) {
-            var bleDevice = WATCH_CACHE[deviceID].ble;
-            if ( bleDevice.connectionStatus === bluetooth.BluetoothConnectionStatus.disconnected ) {
-                gatt( bleDevice );
-            } else {
-                setBLEStatusListener( bleDevice, success, failure ); //Use Cached BLE Device
-            }
+            bleDevice = WATCH_CACHE[deviceID].ble;
+            gatt( bleDevice );
         } else {
             getBLE( deviceID, gatt, failure ); //Step 1
         }
