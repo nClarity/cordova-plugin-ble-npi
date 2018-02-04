@@ -1,43 +1,50 @@
 //var app = WinJS.Application;
 var bluetooth = Windows.Devices.Bluetooth;
+var deviceInfo = Windows.Devices.Enumeration.DeviceInformation;
 var gatt = Windows.Devices.Bluetooth.GenericAttributeProfile;
-var crypto = Windows.Security.Cryptography;
+//var wsc = Windows.Security.Cryptography;
 
-
-var service;
-var serviceFilter;
 var serviceInitialized = false;
 
-var bluetoothLeDevice;
-
 var DevEnum = Windows.Devices.Enumeration;
-var deviceWatcher = null;
-var deviceArray = [];
+var deviceWatcher;
 var isEnumerationComplete = false;
 
-var serviceCollection = [];
-var characteristicCollection = [];
-
-//var selectedCharcUuid;
-
-var listObj = {
-    deviceID: "",
-    selectedCharacteristic: {}
-};
-
-var listeners = [];
+var WATCH_CACHE = {};
+var LISTEN_CACHE = {};
 
 var successFn;
 var failureFn;
+
 var notifyCallback;
+
 var scanTimer;
 var connectTimer;
-var isBusy = false;
-var watcher;
+
+var isInitialized = false;
 
 // *** DEVICE ENUMERATION SECTION ***
-function startWatcher() {
+function initializeDevice( success, failure ) {
+    //var selector = "System.Devices.InterfaceClassGuid:=\"{6E3BB679-4372-40C8-9EAA-4509DF260CD8}\" AND System.Devices.InterfaceEnabled:=System.StructuredQueryType.Boolean#True";
+    //var selector = "System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\""
+    var selector = Windows.Devices.Bluetooth.BluetoothLEDevice.getDeviceSelectorFromConnectionStatus( false );
 
+    deviceInfo.findAllAsync( selector, null ).done(
+        function ( devices ) {
+            if ( devices.length > 0 ) {
+                isInitialized = true;
+                success( true );
+            } else {
+                failure( { error: "initialize", message: "No BLE devices found." } );
+            }
+        },
+        function ( error ) {
+            failure( { error: "initialize", message: error.message } );
+        } );
+}
+
+function startWatcher() {
+    var DeviceWatcherStatus = Windows.Devices.Enumeration.DeviceWatcherStatus;
     // Get the device selector chosen by the UI then add additional constraints for devices that 
     // can be paired or are already paired.
 
@@ -47,31 +54,46 @@ function startWatcher() {
         selectorBT: "System.Devices.Aep.ProtocolId:=\"{e0cbf06c-cd8b-4647-bb8a-263b43f0f974}\"",
         kind: Windows.Devices.Enumeration.DeviceInformationKind.associationEndpoint
     };
-    var selector = "(" + selectedItem.selectorBLE + ")";
+    //var selector = "(" + selectedItem.selectorBLE + ")";
+    var selector = selectedItem.selectorBLE;
+    //var selector = Windows.Devices.Bluetooth.BluetoothLEDevice.getDeviceSelectorFromConnectionStatus( false );
 
     var reqProperties = [];
     reqProperties[0] = "System.Devices.Aep.DeviceAddress";
     reqProperties[1] = "System.Devices.Aep.IsConnected";
     reqProperties[2] = "System.Devices.Aep.SignalStrength";
 
-    deviceArray = [];
-    deviceWatcher = DevEnum.DeviceInformation.createWatcher( selector, reqProperties, selectedItem.kind );
+    // Drop cache first
+    //deviceArray = [];
 
-    // Add event handlers
-    deviceWatcher.addEventListener( "added", onAdded, false );
-    deviceWatcher.addEventListener( "updated", onUpdated, false );
-    deviceWatcher.addEventListener( "removed", onRemoved, false );
-    deviceWatcher.addEventListener( "enumerationcompleted", onEnumerationCompleted, false );
-    deviceWatcher.addEventListener( "stopped", onStopped, false );
+    if ( !deviceWatcher ) {
+        deviceWatcher = DevEnum.DeviceInformation.createWatcher( selector, reqProperties, selectedItem.kind );
+        //deviceWatcher = DevEnum.DeviceInformation.createWatcher();
 
-    console.log( "Starting watcher..." );
+        // Add event handlers
+        deviceWatcher.addEventListener( "added", onAdded, false );
+        deviceWatcher.addEventListener( "updated", onUpdated, false );
+        deviceWatcher.addEventListener( "removed", onRemoved, false );
+        deviceWatcher.addEventListener( "enumerationcompleted", onEnumerationCompleted, false );
+        deviceWatcher.addEventListener( "stopped", onStopped, false );
 
-    try {
-        deviceWatcher.start();
-    } catch ( err ) {
-        console.log( "deviceWatcher error: " + err );
+        console.log( "Starting watcher..." );
+        try {
+            deviceWatcher.start();
+        } catch ( err ) {
+            console.log( "deviceWatcher error: " + err );
+        }
+
+    } else {
+        if ( deviceWatcher.status !== DeviceWatcherStatus.started &&
+            deviceWatcher.status !== DeviceWatcherStatus.created &&
+            deviceWatcher.status !== DeviceWatcherStatus.stopped &&
+            deviceWatcher.status !== DeviceWatcherStatus.aborted ) {
+
+            console.log( 'Scan already in progress' );
+        }
     }
-
+    return;
 }
 
 function stopWatcher() {
@@ -86,86 +108,17 @@ function stopWatcher() {
         deviceWatcher.removeEventListener( "removed", onRemoved );
         deviceWatcher.removeEventListener( "enumerationcompleted", onEnumerationCompleted );
         deviceWatcher.removeEventListener( "stopped", onStopped );
-        try {
-            if ( DevEnum.DeviceWatcherStatus.started === deviceWatcher.status ||
-                DevEnum.DeviceWatcherStatus.enumerationCompleted === deviceWatcher.status ) {
-                deviceWatcher.stop();
-                deviceWatcher = undefined;
-            }
-        } catch ( e ) {
-            console.log( "Failed to stop watcher: " + e.message );
-            stopsuccess = false;
+
+        if ( DevEnum.DeviceWatcherStatus.started === deviceWatcher.status ||
+            DevEnum.DeviceWatcherStatus.enumerationCompleted === deviceWatcher.status ) {
+            deviceWatcher.stop();
+            deviceWatcher = undefined;
+            console.log( "Watcher stopped..." );
         }
+
     }
 
     return stopsuccess;
-}
-
-function getDevice( deviceID ) {
-    var len = deviceArray.length;
-
-    for ( var i = 0; i < len; i++ ) {
-        if ( deviceArray[i].id === deviceID ) {
-            return deviceArray[i];
-        }
-    }
-    return false;
-}
-
-function getService( uuid ) {
-    var len = serviceCollection.length;
-
-    for ( var i = 0; i < len; i++ ) {
-        if ( serviceCollection[i].uuid === uuid ) {
-            return serviceCollection[i];
-        }
-    }
-    return false;
-}
-
-function getSelectedCharacteristicUuid( uuid, guid, callback ) {
-    //selectedCharcUuid = uuid;
-    //selectedCharacteristic = undefined;
-
-    bluetoothLeDevice.getGattServicesForUuidAsync( uuid ).done(
-        function ( svc ) {
-            if ( svc.services.length > 0 ) {
-                svc.services[0].getCharacteristicsForUuidAsync( guid ).done(
-                    function ( charc ) {
-                        if ( charc.characteristics.length > 0 ) {
-                            var selectedCharacteristic = charc.characteristics[0];
-                            callback( selectedCharacteristic );
-                        } else {
-                            callback( false );
-                        }
-                    } );
-            } else {
-                callback( false );
-            }
-
-        } );
-}
-
-function getListeners(deviceID) {
-    var len = listeners.length;
-
-    for ( var i = 0; i < len; i++ ) {
-        var listObj = listeners[i];
-        if ( listObj.deviceID === deviceID ) {
-            return listObj.selectedCharacteristic;
-        }
-    }
-    return false;
-}
-
-function removeListener( deviceID ) {
-    var len = listeners.length;
-
-    for ( var i = 0; i < len; i++ ) {
-        if ( listeners[i].deviceID === deviceID ) {
-            listeners.splice( i, 1 );
-        }
-    }
 }
 
 function onAdded( devinfo ) {
@@ -178,83 +131,108 @@ function onAdded( devinfo ) {
         name: devinfo.name,
         rssi: 0,
     };
+    var rssi = 0;
 
-    var uuid = "{" + serviceFilter[0] + "}";
+    if ( !devinfo.name ) {
+        thisDevice.name = "Unknown";
+    }
 
-    console.log( "onAdded: found a device: " + devinfo.name + " Device isEnabled: " + devinfo.isEnabled );
+    //Initialize our BLE object
+    function init() {
+        if ( !WATCH_CACHE[devinfo.id] ) {
+            WATCH_CACHE[devinfo.id] = {};
+            WATCH_CACHE[devinfo.id].deviceInfo = thisDevice;
+            WATCH_CACHE[devinfo.id].device = devinfo;
+            WATCH_CACHE[devinfo.id].ble = {};
+            WATCH_CACHE[devinfo.id].services = {}; //.characteristics = {}; .descriptors
+            console.log( "onAdded: found a device: " + devinfo.name + " Device isEnabled: " + devinfo.isEnabled );
+        }
+    }
 
     function searchForUuid() {
-        bluetooth.BluetoothLEDevice.fromIdAsync( devinfo.id ).done(
-            function ( c_device ) {
-                c_device.getGattServicesForUuidAsync( uuid ).done(
-                    function ( result ) {
-                        if ( result.services.length > 0 ) {
-                            if ( scanTimer ) { clearTimeout( scanTimer ); }
-                            bluetoothLeDevice = c_device;
-                            if ( devinfo.name === "" ) {
-                                devinfo.name = c_device.name;
-                            }
-                            console.log( "Search for Uuid: found a device: " + bluetoothLeDevice.name );
-                            stopWatcher();
-                            returnDevice();
+
+        function checkUuid() {
+            WATCH_CACHE[thisDevice.id].ble.getGattServicesForUuidAsync( uuid ).done(
+                function ( result ) {
+                    if ( result.status === 0 ) {
+                        if ( scanTimer ) { clearTimeout( scanTimer ); }
+                        WATCH_CACHE[thisDevice.id].services[uuid] = result.service[0];
+                        if ( devinfo.name === "Name Not Discovered" ) {
+                            devinfo.name = c_device.name;
                         }
-                    } );
+                        console.log( "Search for Uuid: found a device: " + WATCH_CACHE[thisDevice.id].ble.name );
+                        stopWatcher();
+                        returnDevice();
+                    }
+                },
+                function ( error ) {
+                    console.log( "Error in searching gattUUID: " + error );
+                }
+            );
+        }
+
+        function failedBLE() {
+            Console.log( "Not a valid BLE device" );
+        }
+
+        getBLE( deviceID, checkUuid, returnDevice );
+    }
+
+    function failServices( error ) {
+        console.log( "Failed to find services during enumeration: " + error );
+    }
+
+    function successServices( result ) {
+        console.log( "Success in setting up services: " + result );
+    }
+
+    function getServices( BLE ) {
+        var cacheMode = bluetooth.BluetoothCacheMode.uncached;
+        getGATTServices( BLE, cacheMode, successServices, failServices );
+    }
+
+    function returnDevice( services ) {
+        if ( !WATCH_CACHE[devinfo.id] ) { init(); }
+
+        if ( services ) {
+            console.log( services );
+            var i = 0;
+            for ( var svc in services ) {
+                thisDevice.advertising.services[i] = svc;
+                i++;
             }
-        );
-    }
+            cacheGattServices( WATCH_CACHE[devinfo.id].services, services );
+        }
 
-    function returnDevice() {
         if ( devinfo.properties['System.Devices.Aep.SignalStrength'] !== null ) {
-            thisDevice.rssi = devinfo.properties['System.Devices.Aep.SignalStrength'];
+            WATCH_CACHE[devinfo.id].rssi = devinfo.properties['System.Devices.Aep.SignalStrength'];
         }
 
-        if ( getDevice( devinfo.id ) === false && devinfo.name !== "" ) {
-            deviceArray.push( devinfo );
-        }
-
-        if ( serviceFilter.length > 0 ) {
-            //No need for multiple callbacks, we found the device we were looking for
-            successFn( thisDevice );
-        } else {
-            //keep callback, enumerating through all devices
-            successFn( thisDevice, { keepCallback: true } );
-        }
+        successFn( WATCH_CACHE[devinfo.id].deviceInfo, { keepCallback: true } );
     }
 
-    if ( serviceFilter.length > 0 ) {
-        searchForUuid();
-    } else {
-        returnDevice();
-    }
+    init();
+    //getBLE( devinfo.id, getServices, failServices );
+    returnDevice();
 }
 
 function onUpdated( devUpdate ) {
     // Find the corresponding updated DeviceInformation in the collection and pass the update object
     // to the Update method of the existing DeviceInformation. This automatically updates the object
     // for us.
-
-    var updtDevice = getDevice( devUpdate.id );
-    if ( updtDevice !== false ) {
-        console.log( "onUpdated: This device updated:" + updtDevice.name );
-        updtDevice.update( devUpdate );
+    if ( WATCH_CACHE[devUpdate.id] ) {
+        WATCH_CACHE[devUpdate.id].device.update( devUpdate );
     }
 }
 
-function onRemoved( devupdate ) {
-    console.log( "onRemoved: removed a device:" + devupdate.id );
-
-    for ( var i = 0; i < deviceArray.length; i++ ) {
-        if ( deviceArray[i].id === devupdate.id ) {
-            deviceArray.splice( i, 1 );
-        }
-    }
-
-    console.log( deviceArray.length + " devices found. Watching for updates..." );
+function onRemoved( devUpdate ) {
+    console.log( "onRemoved: device:" + devUpdate.id );
+    //delete WATCH_CACHE[devUpdate.id];
 }
 
 function onEnumerationCompleted( obj ) {
     isEnumerationComplete = true;
-    console.log( deviceArray.length + " devices found. Enumeration completed. Watching for updates..." );
+    console.log( Object.keys( WATCH_CACHE ).length + " devices found. Enumeration completed. Watching for updates..." );
 }
 
 function onStopped( obj ) {
@@ -265,41 +243,189 @@ function onStopped( obj ) {
         msg = 'You requested to stop enumeration';
     }
     console.log( 'onStopped message: ' + msg );
-    console.log( deviceArray.length + " devices found. Watcher stopped" );
+    console.log( Object.keys( WATCH_CACHE ).length + " devices found. Watcher stopped" );
 }
 
-function pairDevice( success, failure ) {
-    if ( deviceSelected.pairing.isPaired === true ) {
-        console.log( "Already paired with " + deviceSelected.name );
-        success();
-    } else if ( deviceSelected.pairing.canPair === true ) {
+//**GATT Functions
+
+function getDeviceSelectorFromUuid( serviceUuid ) {
+    //Creates a suitable AQS Filter string for use with the CreateWatcher method, from a Bluetooth service UUID.
+    var string = gatt.GattDeviceService.getDeviceSelectorFromUuid( serviceUuid );
+    return string;
+}
+
+function pairDevice( deviceID, success, failure ) {
+    var DPPL = Windows.Devices.Enumeration.DevicePairingProtectionLevel;
+
+    if ( WATCH_CACHE[deviceID].ble.deviceInformation.pairing.isPaired === true ) {
+        console.log( "Already paired with " + WATCH_CACHE[deviceID].device.name );
+        success( deviceID );
+    } else if ( WATCH_CACHE[deviceID].ble.deviceInformation.pairing.canPair === true ) {
         var pMsg = "Not properly paired";
-        deviceSelected.pairing.pairAsync().done(
+        WATCH_CACHE[deviceID].ble.deviceInformation.pairing.pairAsync( DPPL.none ).done(
             function ( pairingResult ) {
                 if ( connectTimer ) { clearTimeout( connectTimer ); }
                 pMsg = returnEnum( pairingResult.status, DevEnum.DevicePairingResultStatus );
-                console.log( "Pairing result with " + deviceSelected.name + " = " + pMsg );
+                console.log( "Pairing result with " + WATCH_CACHE[deviceID].device.name + " = " + pMsg );
                 if ( pairingResult.status === DevEnum.DevicePairingResultStatus.paired ) {
-                    isBusy = false;
-                    setTimeout( success, 100 );
-                } else {
-                    failure( "Error msg: " + pMsg );
+                    success( deviceID );
+                } else if ( pairingResult.status === 19 ) {
+                    failure( pMsg );
                 }
+                return;
             } );
     } else { //not able to pair
         console.log( "Not able to pair with this device: " + deviceSelected.name );
-        failure( "Not able to pair with this device: " + deviceSelected.name );
+        getGATT();
     }
 }
 
-function onCharacteristicValueChanged( evt, callback ) {
-    var data = ua2hex( new Uint8Array( evt.characteristicValue ) );
-    console.log( "New value: " + data.toString());
-    notifyCallback( evt.characteristicValue, { keepCallback: true } );
+
+function setBLEStatusListener( bleDevice, success, failure ) {
+    var result = {
+        id: bleDevice.deviceId,
+        status: "connected"
+    };
+
+    function connectionStatusListener( e ) {
+        if ( e.target.connectionStatus === Windows.Devices.Bluetooth.BluetoothConnectionStatus.disconnected ) {
+            result.status = "disconnected";
+            if ( bleDevice ) {
+                bleDevice.removeEventListener( 'connectionstatuschanged', connectionStatusListener );
+                failure( result );
+            }
+        }
+    }
+    // Attach listener to device to report disconnected event
+    bleDevice.addEventListener( 'connectionstatuschanged', connectionStatusListener );
+
+    success( result, { keepCallback: true } );
+}
+
+function getBLE( deviceID, success, failure ) {
+    bluetooth.BluetoothLEDevice.fromIdAsync( deviceID ).done(
+        function ( bleDevice ) {
+            console.log( "BluetoothLeDevice object created" );
+            success( bleDevice );
+        },
+        function ( error ) {
+            failure( error );
+        }
+    );
+}
+
+function getGATTServices( bleDevice, cacheMode, success, failure ) {
+    //Returns a list of Service Uuid's
+    //cacheMode = bluetooth.BluetoothCacheMode.uncached || bluetooth.BluetoothCacheMode.cached
+
+    bleDevice.getGattServicesAsync( cacheMode ).done(
+        function ( result ) {
+            if ( result.status === gatt.GattCommunicationStatus.success ) {
+                var services = result.services;
+                var len = services.length;
+                var serviceObj = {};
+                console.log( "GattServices - found: " + len + " services" );
+                for ( var i = 0; i < len; i++ ) {
+                    serviceObj[services[i].uuid] = {};
+                    serviceObj[services[i].uuid].uuid = services[i].uuid;
+                    serviceObj[services[i].uuid].service = services[i];
+                    console.log( "Service: " + services[i].uuid );
+                }
+                success( serviceObj );
+            } else {
+                console.log( "Failed GattComms connection" );
+                failure( "Could not connect to device. Make sure device is on and BT is activated" );
+            }
+        },
+        function ( error ) {
+            failure( error );
+        }
+    );
+}
+
+function getGATTServiceUuid( bleDevice, serviceUuid, success, failure ) {
+
+    bleDevice.getGattServicesForUuidAsync( serviceUuid ).done(
+        function ( result ) {
+            if ( result.status === gatt.GattCommunicationStatus.success ) {
+                var services = result.services;
+                if ( result.services.length > 0 ) {
+                    var serviceObj = {
+                        uuid: services[0].uuid,
+                        service: services[0]
+                    };
+                    success( serviceObj );
+                    console.log( "Service: " + services[0].uuid );
+                } else {
+                    console.log( "Failed GattComms connection" );
+                    failure( "GatComms received a successful communication status, but no services found" );
+                }
+
+            } else {
+                console.log( "Failed GattComms connection" );
+                failure( "GatComms received a failed communication status" );
+            }
+        },
+        function ( error ) {
+            failure( error );
+        }
+    );
+}
+
+function cacheGattServices( CACHE, services ) {
+    if ( CACHE && services.length > 0 ) {
+        for ( var svc in services ) {
+            if ( !CACHE[svc] ) {
+                CACHE[svc] = services[svc];
+            }
+        }
+    }
+}
+
+function getSelectedCharacteristicUuid( service, guid, callback ) {
+
+    if ( service && guid ) {
+        service.getCharacteristicsForUuidAsync( guid ).done(
+            function ( found ) {
+                if ( found.status === 0 && found.characteristics.length > 0 ) {
+                    callback( found.characteristics[0] );
+                } else {
+                    callback( false );
+                }
+            } );
+    } else {
+        //Need to get services for this device
+        callback( false );
+    }
+}
+
+function getAllCharacteristics( service, callback ) {
+    if ( service ) {
+        service.getCharacteristicsAsync().done(
+            function ( characteristics ) {
+                if ( characteristics.status === 0 ) {
+                    callback( characteristics.characteristics );
+                }
+            },
+            function ( error ) {
+                callback( false );
+            }
+        );
+    } else {
+        callback( false );
+    }
+}
+
+
+//***HELPERS***
+function onValueChanged( eventArgs, callback ) {
+    var data = ua2hex( new Uint8Array( eventArgs.characteristicValue ) );
+    console.log( "New value: " + data.toString() );
+    callback( eventArgs.characteristicValue, { keepCallback: true } );
 }
 
 function returnEnum( result, object ) {
-    var answer;
+    var answer = -1;
     Object.keys( object ).forEach( function ( key ) {
         var value = object[key];
         if ( value === result ) {
@@ -307,13 +433,6 @@ function returnEnum( result, object ) {
         }
     } );
     return answer;
-}
-
-function clearBLEDevice() {
-    if ( bluetoothLeDevice ) {
-        bluetoothLeDevice.close();
-        bluetoothLeDevice = undefined;
-    }   
 }
 
 function ua2hex( ua ) {
@@ -324,6 +443,7 @@ function ua2hex( ua ) {
     return h;
 }
 
+//***Public functions
 module.exports = {
 
     scan: function ( success, failure, args ) {
@@ -331,14 +451,17 @@ module.exports = {
         var scanTime = args[1] * 1000;
         successFn = success;
         failureFn = failure;
-        deviceArray = [];
 
-        startWatcher();
-        scanTimer = setTimeout(
-            function () {
-                stopWatcher();
-            }, scanTime );
+        function continueScan( result ) {
+            startWatcher();
+            scanTimer = setTimeout(
+                function () {
+                    stopWatcher();
+                }, scanTime );
+        }
 
+        //startWatcher();
+        continueScan( true );
     },
 
     startScan: function ( success, failure, svcs ) {
@@ -375,118 +498,123 @@ module.exports = {
 
     connect: function ( success, failure, args ) {
         var deviceID = args[0];
-        var deviceSelected = getDevice( deviceID );
-        var data = [];
-        var len = deviceArray.length;
-        var isBusy = false;
 
-        if ( deviceSelected === false ) {
+        if ( !WATCH_CACHE[deviceID] ) { //Device enumeration didn't find this or user didn't scan first but provided ID
             failure( "Device not found" );
             return;
         }
-
         console.log( "Attempting to connect..." );
 
-        function getGATT() {
-            serviceCollection = [];
-            bluetoothLeDevice.getGattServicesAsync( bluetooth.BluetoothCacheMode.uncached ).done(
-                function ( result ) {
-                    if ( result.status === gatt.GattCommunicationStatus.success ) {
-                        var services = result.services;
-                        var len = services.length;
-                        console.log( "GattServices - found: " + len + " services" );
-                        for ( var i = 0; i < len; i++ ) {
-                            serviceCollection.push( services[i] );
-                            console.log( "Service: " + services[i].uuid );
-                        }
-                        
-                        success( bluetoothLeDevice );
-                    } else {
-                        console.log( "Failed GattComms connection" );
-                        failure( "Could not connect to device. Make sure device is on and BT is activated" );
-                    }
-                }
-            );
+        function CharSuccess( deviceID ) {
+            listen( deviceID );
+            return;
         }
 
-        function getBLE() {
-            try {
-                bluetooth.BluetoothLEDevice.fromIdAsync( deviceSelected.id ).done(
-                    function ( deviceInfo ) {
-                        console.log( "BluetoothLeDevice object created" );
-                        bluetoothLeDevice = deviceInfo;
-                        setTimeout( getGATT, 100 );
-                        
-                    }
-                );
-                
-            } catch ( err ) { //In case radio is off
-                failure( "Error: " + err );
+        function getCharac( deviceID ) {
+            for ( var uuid in WATCH_CACHE[deviceID].services ) {
+                getServiceCharacteristics( deviceID, uuid, CharSuccess );
             }
         }
 
-        clearBLEDevice();
-        getBLE();
-        //pairDevice(getBLE, failure);
+        function pair( deviceID ) {
+            pairDevice( deviceID, gatt, failure )
+        }
+
+        function cacheGatt( services ) { //Step 3 
+            cacheGattServices( WATCH_CACHE[deviceID].services, services ); //Cache services for fast reference         
+        }
+
+        function gatt( bleDevice ) { //Step 2
+            WATCH_CACHE[deviceID].ble = bleDevice; //Cache device for reference  
+            getGATTServices( bleDevice, bluetooth.BluetoothCacheMode.uncached, cacheGatt, failure );
+            setBLEStatusListener( bleDevice, success, failure );
+        }
+
+        if ( WATCH_CACHE[deviceID].ble.deviceId ) {
+            var bleDevice = WATCH_CACHE[deviceID].ble;
+            if ( bleDevice.connectionStatus === bluetooth.BluetoothConnectionStatus.disconnected ) {
+                gatt( bleDevice );
+            } else {
+                setBLEStatusListener( bleDevice, success, failure ); //Use Cached BLE Device
+            }
+        } else {
+            getBLE( deviceID, gatt, failure ); //Step 1
+        }
+
     },
 
     disconnect: function ( success, failure, args ) {
         var deviceID = args[0];
-        var data = [];
-        var stats = 0;
+        //var len = WATCH_CACHE[deviceID].listeners.length;
 
         console.log( "Stopping watcher. Please wait..." );
         stopWatcher();
         console.log( "Closing bluetooth connection. Please wait..." );
 
-        var selectedCharacteristic = getListeners( deviceID );
+        //Loop through each service and characterisitc and turn off any event listeners
 
-        if ( selectedCharacteristic ) {
-            selectedCharacteristic.removeEventListener( "valuechanged", onCharacteristicValueChanged, false );
-            removeListener( deviceID );
-        }
+        //if ( len > 0 ) {
+        //    for ( var i = 0; i < len; i++ ) {
+        //        var uuid = LISTEN_CACHE[deviceID].listeners[i].uuid;
+        //        var guid = LISTEN_CACHE[deviceID].listeners[i].guid;
+        //        WATCH_CACHE[deviceID].services[uuid].characteristics[guid].characteristic.removeEventListener( "valuechanged", onCharacteristicValueChanged, false );
+        //    }
+        //}
 
-        clearBLEDevice();
-
-        success( data );
+        success( deviceID );
     },
 
     read: function ( success, failure, args ) {
         //Reads the value of a characteristic.
         var deviceID = args[0];
         var characteristics = {
-            system: args[1],
-            readTimer: args[2]
+            SYSTEM: args[1],
+            READ_TIMER: args[2]
         };
         var data = args[3];
 
         var ui8Data = new Uint8Array( data );
         var services;
-        var uuid = "{" + characteristics.system + "}";
-        //var selectedCharacteristic;
+        var uuid = characteristics.SYSTEM; // "{" + characteristics.SYSTEM + "}";
+        var guid = characteristics.READ_TIMER; //"{" + characteristics.READ_TIMER + "}";
 
-        function read( selectedCharacteristic ) {
-            if ( selectedCharacteristic === false ) {
+        function thisReader( characteristic ) {
+            if ( characteristic === false ) {
                 failure( "Unable to map charcterisitcs for reading" );
                 return;
             }
-            try {
-                // this is where the data is read
 
-                selectedCharacteristic.readValueAsync( bluetooth.BluetoothCacheMode.uncached ).done(
-                    function ( result ) {
-                        if ( result.status === gatt.GattCommunicationStatus.success ) {
-                            success( result );
-                        } else {
-                            failure( "Unable to read" );
-                        }
-                    } );
-            } catch ( error ) {
-                console.log( "Reading failed with error: " + error );
-            }
+            // this is where the data is read
+            characteristic.readValueAsync( bluetooth.BluetoothCacheMode.uncached ).done(
+                function ( result ) {
+                    if ( result.status === gatt.GattCommunicationStatus.success ) {
+                        success( result );
+                    } else {
+                        failure( "Unable to read" );
+                    }
+                } );
+
         }
 
-        getSelectedCharacteristicUuid( uuid, read );
+        function thisFailed( error ) {
+            failure( error );
+        }
+
+        function getLocalCharacteristic( service ) {
+            if ( service ) {
+                WATCH_CACHE[deviceID].services[uuid] = {};
+                WATCH_CACHE[deviceID].services[uuid] = service;
+            }
+            var thisService = WATCH_CACHE[deviceID].services[uuid].service;
+            getSelectedCharacteristicUuid( thisService, guid, thisReader );
+        }
+
+        if ( !WATCH_CACHE[deviceID].services[uuid] ) {
+            var bleDevice = WATCH_CACHE[deviceID].ble
+            getGATTServiceUuid( bleDevice, uuid, getLocalCharacteristic, thisFailed )
+        } else {
+            getLocalCharacteristic();
+        }
 
     },
 
@@ -507,34 +635,53 @@ module.exports = {
 
         var ui8Data = new Uint8Array( buffer );
 
-        var uuid = "{" + characteristics.SYSTEM + "}";
-        var guid = "{" + characteristics.READ_TIMER + "}";
+        var uuid = characteristics.SYSTEM; //"{" + characteristics.SYSTEM + "}";
+        var guid = characteristics.READ_TIMER; //"{" + characteristics.READ_TIMER + "}";
 
-        function send( selectedCharacteristic ) {
-            if ( selectedCharacteristic === false ) {
-                failure( "Unable to map charcterisitcs for writing" );
-                return;
-            }
-            try {
-                var writer = new Windows.Storage.Streams.DataWriter();
-                writer.writeBytes( ui8Data );
+        function thisWriter( characteristic ) {
+            if ( characteristic ) {
+                try {
+                    var writer = new Windows.Storage.Streams.DataWriter();
+                    writer.writeBytes( ui8Data );
 
-                // this is where the data is sent
-                selectedCharacteristic.writeValueAsync( writer.detachBuffer() ).done(
-                    function ( result ) {
-                        if ( result === gatt.GattCommunicationStatus.success ) {
-                            console.log( "wrote this data: " + data.toString() );
-                            success();
-                        } else {
-                            failure( "Unable to write" );
-                        }
-                    } );
-            } catch ( error ) {
-                failure( "Writing failed with error: " + error );
+                    // this is where the data is sent
+                    characteristic.writeValueAsync( writer.detachBuffer(), gatt.GattWriteOption.writeWithResponse ).done(
+                        function ( result ) {
+                            if ( result === gatt.GattCommunicationStatus.success ) {
+                                console.log( "wrote this data: " + data.toString() );
+                                success();
+                            } else {
+                                failure( "Unable to write" );
+                            }
+                        } );
+                } catch ( error ) {
+                    failure( "Writing failed with error: " + error );
+                }
+            } else {
+                failure( "Error - unable to find characteristic: " + guid );
             }
         }
 
-        getSelectedCharacteristicUuid( uuid, guid, send );
+        function thisFailed( error ) {
+            failure( error );
+        }
+
+        function getLocalCharacteristic( service ) {
+            if ( service ) {
+                WATCH_CACHE[deviceID].services[uuid] = {};
+                WATCH_CACHE[deviceID].services[uuid] = service;
+            }
+            var thisService = WATCH_CACHE[deviceID].services[uuid].service;
+            getSelectedCharacteristicUuid( thisService, guid, thisWriter );
+        }
+
+        if ( !WATCH_CACHE[deviceID].services[uuid] ) {
+            var bleDevice = WATCH_CACHE[deviceID].ble
+            getGATTServiceUuid( bleDevice, uuid, getLocalCharacteristic, thisFailed )
+        } else {
+            getLocalCharacteristic();
+        }
+
     },
 
     writeWithoutResponse: function ( success, failure, args ) {
@@ -550,19 +697,11 @@ module.exports = {
 
         var ui8Data = new Uint8Array( buffer );
 
-        var uuid = "{" + characteristics.SYSTEM + "}";
-        var guid = "{" + characteristics.READ_TIMER + "}";
+        var uuid = characteristics.SYSTEM; //"{" + characteristics.SYSTEM + "}";
+        var guid = characteristics.READ_TIMER; //"{" + characteristics.READ_TIMER + "}";
 
-        function ua2hex( ua ) {
-            var h = [];
-            for ( var i = 0; i < ua.length; i++ ) {
-                h[i] = ( "0" + ua[i].toString( 16 ) ).substr( -2 );
-            }
-            return h;
-        }
-
-        function send( selectedCharacteristic ) {
-            if ( selectedCharacteristic === false ) {
+        function send( characteristic ) {
+            if ( characteristic === false ) {
                 failure( "Unable to map charcterisitcs for writing" );
                 return;
             }
@@ -571,7 +710,7 @@ module.exports = {
                 writer.writeBytes( ui8Data );
 
                 // this is where the data is sent
-                selectedCharacteristic.writeValueAsync( writer.detachBuffer() ).done(
+                characteristic.writeValueAsync( writer.detachBuffer(), gatt.GattWriteOption.writeWithoutResponse ).done(
                     function ( result ) {
                         if ( result === gatt.GattCommunicationStatus.success ) {
                             console.log( "wrote this data: " + data.toString() );
@@ -585,7 +724,26 @@ module.exports = {
             }
         }
 
-        getSelectedCharacteristicUuid( uuid, guid, send );
+        function thisFailed( error ) {
+            failure( error );
+        }
+
+        function getLocalCharacteristic( service ) {
+            if ( service ) {
+                WATCH_CACHE[deviceID].services[uuid] = {};
+                WATCH_CACHE[deviceID].services[uuid] = service;
+            }
+            var thisService = WATCH_CACHE[deviceID].services[uuid].service;
+            getSelectedCharacteristicUuid( thisService, guid, send );
+        }
+
+        if ( !WATCH_CACHE[deviceID].services[uuid] ) {
+            var bleDevice = WATCH_CACHE[deviceID].ble
+            getGATTServiceUuid( bleDevice, uuid, getLocalCharacteristic, thisFailed )
+        } else {
+            getLocalCharacteristic();
+        }
+
     },
 
     notify: function ( success, failure, args ) {
@@ -600,82 +758,113 @@ module.exports = {
             READ_TIMER: args[2]
         };
 
-        var uuid = "{" + characteristics.SYSTEM + "}";
-        var guid = "{" + characteristics.READ_TIMER + "}";
+        var uuid = characteristics.SYSTEM; //"{" + characteristics.SYSTEM + "}";
+        var guid = characteristics.READ_TIMER; //"{" + characteristics.READ_TIMER + "}";
 
-        notifyCallback = success;
-
-        function makeListener( selectedCharacteristic ) {
-            if ( selectedCharacteristic ) {
-                var descriptor = selectedCharacteristic.getAllDescriptors();
-                var properties = returnEnum( selectedCharacteristic.characteristicProperties, Windows.Devices.Bluetooth.GenericAttributeProfile.GattCharacteristicProperties );
-
-                selectedCharacteristic.readClientCharacteristicConfigurationDescriptorAsync().done(
-                    function ( descriptors ) {
-                        var gattClientCharacteristic;
-
-                        if ( descriptors.clientCharacteristicConfigurationDescriptor === gatt.GattClientCharacteristicConfigurationDescriptorValue.none ) { //none 
-                            gattClientCharacteristic = gatt.GattClientCharacteristicConfigurationDescriptorValue.none;
-                        } else if ( descriptors.clientCharacteristicConfigurationDescriptor === gatt.GattClientCharacteristicConfigurationDescriptorValue.indicate ) {// indicate
-                            gattClientCharacteristic = gatt.GattClientCharacteristicConfigurationDescriptorValue.indicate;
-                        } else if ( descriptors.clientCharacteristicConfigurationDescriptor === gatt.GattClientCharacteristicConfigurationDescriptorValue.notify ) {//Notify
-                            gattClientCharacteristic = gatt.GattClientCharacteristicConfigurationDescriptorValue.notify;
-                        } else if ( descriptors.clientCharacteristicConfigurationDescriptor > 1 ) {//Notify
-                            gattClientCharacteristic = gatt.GattClientCharacteristicConfigurationDescriptorValue.notify;
-                        }else {
-                            failure( "StartNotification Error: Unable to determine client descriptors" );
-                            return;
-                        }
-
-                        selectedCharacteristic.writeClientCharacteristicConfigurationDescriptorAsync( gattClientCharacteristic ).done(
-                            function ( result ) {
-                                if ( result === gatt.GattCommunicationStatus.success ) {
-                                    selectedCharacteristic.addEventListener( "valuechanged", onCharacteristicValueChanged, false );
-                                    var listObj = {
-                                        deviceID: deviceID,
-                                        selectedCharacteristic: selectedCharacteristic
-                                    }
-                                    listeners.push( listObj );
-                                } else {
-                                    failure( "Error registering for indications" );
-                                }
-                            } );
-                        return;
-                    }
-                );
-
-            } else {
-                failure( "Failed to StartNotifications" )
+        function thisNotifier( characteristic ) {
+            if ( characteristic === false ) {
+                failure( "Characteristic (guid) not found!" );
+                return;
             }
+
+            //Cache this so we can turn off the specific notification later
+            WATCH_CACHE[deviceID].services[uuid].characteristics = {};
+            WATCH_CACHE[deviceID].services[uuid].characteristics[guid] = {};
+            WATCH_CACHE[deviceID].services[uuid].characteristics[guid].characteristic = characteristic;
+
+            var gattClientCharacteristic = returnEnum( characteristic.characteristicProperties, Windows.Devices.Bluetooth.GenericAttributeProfile.GattCharacteristicProperties );
+
+            if ( gattClientCharacteristic === -1 ) {
+                if ( characteristic.characteristicProperties === 40 ) {
+                    gattClientCharacteristic = gatt.GattClientCharacteristicConfigurationDescriptorValue.indicate;
+                } else {
+                    gattClientCharacteristic = gatt.GattClientCharacteristicConfigurationDescriptorValue.notify;
+                }
+            }
+
+            characteristic.writeClientCharacteristicConfigurationDescriptorAsync( gattClientCharacteristic ).done(
+                function ( gattResult ) {
+                    if ( gattResult === gatt.GattCommunicationStatus.success ) {
+                        characteristic.onvaluechanged = function ( onChangeResult ) {
+                            var data = ua2hex( new Uint8Array( onChangeResult.characteristicValue ) );
+                            console.log( "New value: " + data.toString() );
+                            success( onChangeResult.characteristicValue, { keepCallback: true } );
+                        };
+                        console.log( "onvaluechanged: " + characteristic.onvaluechanged );
+                    } else {
+                        failure( "Error registering for indications" );
+                    }
+                } );
+
+
         }
 
-        getSelectedCharacteristicUuid( uuid, guid, makeListener );
+        function thisFailed( error ) {
+            failure( error );
+        }
+
+        function getLocalCharacteristic( service ) {
+            if ( service ) {
+                WATCH_CACHE[deviceID].services[uuid] = {};
+                WATCH_CACHE[deviceID].services[uuid] = service;
+            }
+            var thisService = WATCH_CACHE[deviceID].services[uuid].service;
+            getSelectedCharacteristicUuid( thisService, guid, thisNotifier );
+        }
+
+        if ( !WATCH_CACHE[deviceID].services[uuid] ) {
+            var bleDevice = WATCH_CACHE[deviceID].ble
+            getGATTServiceUuid( bleDevice, uuid, getLocalCharacteristic, thisFailed )
+        } else {
+            getLocalCharacteristic();
+        }
 
     },
 
     stopNotification: function ( success, failure, args ) {
         //Function stopNotification stops a previously registered notification callback.
-        notifyCallback = undefined;
-        if ( selectedCharacteristic ) {
-            selectedCharacteristic.removeEventListener( "valuechanged", onCharacteristicValueChanged, false );
+        var deviceID = args[0];
+        var characteristics = {
+            SYSTEM: args[1],
+            READ_TIMER: args[2]
+        };
+
+        var uuid = characteristics.SYSTEM;
+        var guid = characteristics.READ_TIMER;
+        var characteristic = WATCH_CACHE[deviceID].services[uuid].characteristics[guid].characteristic;
+
+        if ( characteristic ) {
+
+            characteristic.onvaluechanged = null;
+            //characteristic.removeEventListener( "valueChanged", onValueChanged );
+
+            characteristic.writeClientCharacteristicConfigurationDescriptorAsync( gatt.GattClientCharacteristicConfigurationDescriptorValue.none ).done(
+                function ( result ) {
+                    if ( result === gatt.GattCommunicationStatus.success ) {
+                        success( "unsubscribed" );
+                    } else {
+                        failure( "Device unreachable." );
+                    }
+                } );
+        } else {
+            failure( "Characteristic: " + guid + " not found" );
         }
+
     },
 
     isConnected: function ( success, failure, args ) {
         var deviceID = args[0];
-        var deviceDispInfo;
-        var len = deviceArray.length;
 
         console.log( "Checking if connected..." );
-        if ( !bluetoothLeDevice ) {
+        if ( !WATCH_CACHE[deviceID].ble ) {
             failure( "Not Connected to BT device" );
             return;
         }
 
-        var pMsg = pMsg = returnEnum( bluetoothLeDevice.connectionStatus, Windows.Devices.Bluetooth.BluetoothConnectionStatus );
+        var pMsg = pMsg = returnEnum( WATCH_CACHE[deviceID].ble.connectionStatus, Windows.Devices.Bluetooth.BluetoothConnectionStatus );
         console.log( "isConnected: " + pMsg );
 
-        if ( bluetoothLeDevice.connectionStatus === Windows.Devices.Bluetooth.BluetoothConnectionStatus.connected ) {
+        if ( WATCH_CACHE[deviceID].ble.connectionStatus === bluetooth.BluetoothConnectionStatus.connected ) {
             success( true );
         } else {
             failure( "Not Connected to BT device" );
@@ -688,13 +877,13 @@ module.exports = {
         var btradio;
 
         try {
-            access = Windows.Devices.Radios.Radio.requestAccessAsync().then( function ( access ) {
+            Windows.Devices.Radios.Radio.requestAccessAsync().then( function ( access ) {
                 if ( access !== Windows.Devices.Radios.RadioAccessStatus.allowed ) {
                     failure( "Access to bluetooth radio not allowed" );
                 } else {
-                    adapter = bluetooth.BluetoothAdapter.getDefaultAsync().then( function ( adapter ) {
+                    bluetooth.BluetoothAdapter.getDefaultAsync().then( function ( adapter ) {
                         if ( adapter !== null ) {
-                            btRadio = adapter.getRadioAsync().then( function ( btRadio ) {
+                            adapter.getRadioAsync().then( function ( btRadio ) {
                                 if ( btRadio.state === Windows.Devices.Radios.RadioState.on ) {
                                     success();
                                 } else {
