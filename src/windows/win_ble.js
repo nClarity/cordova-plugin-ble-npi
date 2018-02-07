@@ -45,7 +45,7 @@ function initializeDevice( selector, success, failure ) {
 
 function startWatcher() {
     var DeviceWatcherStatus = Windows.Devices.Enumeration.DeviceWatcherStatus;
-    // Get the device selector chosen by the UI then add additional constraints for devices that 
+    // Get the device selector chosen by the UI then add additional constraints for devices that
     // can be paired or are already paired.
     var selector = "System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\""; //BLE
 
@@ -286,7 +286,7 @@ function setBLEStatusListener( bleDevice, success, failure ) {
                 failure( result );
             }
         }
-    }
+    };
 
     // Attach listener to device to report disconnected event
     bleDevice.ble.addEventListener( 'connectionstatuschanged', bleDevice.listener, false );
@@ -397,7 +397,6 @@ function getSelectedCharacteristicUuid( service, guid, callback ) {
                 callback( error );
             }
         );
-        
     } else {
         //Need to get services for this device
         callback( false );
@@ -467,10 +466,9 @@ module.exports = {
         failureFn = failure;
         //WATCH_CACHE = {};
 
-
         if ( args[0] && args[0].length > 0 ) {
             serviceUuidFilter = "{" + args[0].toString() + "}"; //thisServiceFilter
-            //serviceUuidFilter = getSelector( thisServiceFilter ); //returns serviceUuidFilter 
+            //serviceUuidFilter = getSelector( thisServiceFilter ); //returns serviceUuidFilter
         }
 
         startWatcher();
@@ -525,7 +523,7 @@ module.exports = {
         }
         console.log( "Attempting to connect..." );
 
-        function cacheGatt( services ) { //Step 3 
+        function cacheGatt( services ) { //Step 3
             cacheGattServices( WATCH_CACHE[deviceID].services, services ); //Cache services for fast reference
             setBLEStatusListener( WATCH_CACHE[deviceID].ble, success, failure );
             console.log( WATCH_CACHE[deviceID].ble );
@@ -775,7 +773,6 @@ module.exports = {
         var uuid = checkUuid( characteristics.SYSTEM );
         var guid = checkUuid( characteristics.READ_TIMER );
 
-        
         function thisNotifier( characteristic ) {
             if ( characteristic === false || characteristic.message ) {
                 failure( "Characteristic (guid) not found!" );
@@ -834,8 +831,6 @@ module.exports = {
             getSelectedCharacteristicUuid( thisService, guid, thisNotifier );
         }
 
-        
-
         if ( !WATCH_CACHE[deviceID].services[uuid] ) {
             var bleDevice = WATCH_CACHE[deviceID].ble.ble;
             getGATTServiceUuid( bleDevice, uuid, getLocalCharacteristic, thisFailed );
@@ -855,9 +850,9 @@ module.exports = {
 
         var uuid = checkUuid( characteristics.SYSTEM );
         var guid = checkUuid( characteristics.READ_TIMER );
-
+		
         var characteristic = WATCH_CACHE[deviceID].services[uuid].characteristics[guid].characteristic;
-        
+
             if ( characteristic && WATCH_CACHE[deviceID].services[uuid].service.session.sessionStatus === gatt.GattSessionStatus.active ) {
             console.log( "Stop Notification for service: " + uuid + " >>> characteristic: " + guid );
             characteristic.onvaluechanged = null;
@@ -890,7 +885,8 @@ module.exports = {
             return;
         }
 
-        var pMsg = pMsg = returnEnum( WATCH_CACHE[deviceID].ble.ble.connectionStatus, Windows.Devices.Bluetooth.BluetoothConnectionStatus );
+        var pMsg = returnEnum( WATCH_CACHE[deviceID].ble.ble.connectionStatus, Windows.Devices.Bluetooth.BluetoothConnectionStatus );
+
         console.log( "isConnected: " + pMsg );
 
         if ( WATCH_CACHE[deviceID].ble.ble.connectionStatus === bluetooth.BluetoothConnectionStatus.connected ) {
@@ -948,7 +944,7 @@ module.exports = {
                                         if ( btRadio.state === Windows.Devices.Radios.RadioState.on ) {
                                             success();
                                         } else {
-                                            failure( "Failed to activate bluetooth radio" )
+                                            failure( "Failed to activate bluetooth radio" );
                                         }
                                     } );
                                 } else {
@@ -979,6 +975,6 @@ module.exports = {
         //Function stopNotification stops a previously registered notification callback.
         failure( "Not yet implemented..." );
     }
-}
+};
 
 require( "cordova/exec/proxy" ).add( "BLE", module.exports );
