@@ -150,16 +150,15 @@ function onAdded( devinfo ) {
 
         function checkUuid( bleDevice ) {
 
-            if ( devinfo.name === "Unknown" ) {
-                WATCH_CACHE[devinfo.id].deviceInfo.name = bleDevice.name;
-            }
-
             bleDevice.getGattServicesForUuidAsync( serviceUuidFilter ).done(
                 function ( result ) {
                     if ( result.status === gatt.GattCommunicationStatus.success ) {
                         var services = result.services;
                         if ( result.services.length > 0 ) {
                             WATCH_CACHE[devinfo.id].ble.ble = bleDevice;
+                            if ( devinfo.name === "Unknown" ) {
+                                WATCH_CACHE[devinfo.id].deviceInfo.name = bleDevice.name;
+                            }
                             console.log( "Searching ServiceUuid: {" + services[0].uuid + "} - found a matching device: " + bleDevice.name + " ID: " + bleDevice.id );
                             if ( scanTimer ) { clearTimeout( scanTimer ); }
                             returnDevice();
