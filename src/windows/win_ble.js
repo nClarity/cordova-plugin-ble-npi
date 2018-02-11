@@ -1,18 +1,13 @@
 var bluetooth = Windows.Devices.Bluetooth;
 var deviceInfo = Windows.Devices.Enumeration.DeviceInformation;
 var gatt = Windows.Devices.Bluetooth.GenericAttributeProfile;
-var DevEnum = Windows.Devices.Enumeration;
+var devEnum = Windows.Devices.Enumeration;
 
 var deviceWatcher;
-
 var WATCH_CACHE = {};
-var LISTEN_CACHE = {};
-
 var serviceUuidFilter = null;
 var successFn;
 var failureFn;
-
-var notifyCallback;
 
 var scanTimer;
 var connectTimer;
@@ -21,7 +16,12 @@ var connectTimer;
 
 function initializeDevice( selector, success, failure ) {
 
+    var selector3 = Windows.Devices.Bluetooth.BluetoothDevice.getDeviceSelector( Windows.Devices.Bluetooth.Rfcomm.RfcommServiceId.serialPort );
+    var selector2 = Windows.Devices.Bluetooth.BluetoothDevice.getDeviceSelector();
     var selector1 = "System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\"";
+    var gattSelector = gatt.GattDeviceService.getDeviceSelectorFromUuid( selector );
+    var selector4 = Windows.Devices.Bluetooth.BluetoothLEDevice.getDeviceSelector();
+    var selector5 = "System.Devices.DevObjectType:=5"; //AND System.Devices.Aep.ProtocolId:=\"{BB7BB05E-5972 - 42B5-94FC-76EAA7084D49 }\"";
 
     var kind = Windows.Devices.Enumeration.DeviceInformationKind.associationEndpoint;
     var reqProperties = [];
@@ -29,11 +29,19 @@ function initializeDevice( selector, success, failure ) {
     reqProperties[1] = "System.Devices.Aep.IsConnected";
     reqProperties[2] = "System.Devices.Aep.SignalStrength";
 
-    deviceInfo.findAllAsync( selector, reqProperties ).then(
+    //Windows.Devices.Bluetooth.Rfcomm.RfcommDeviceService.getDeviceSelector( Windows.Devices.Bluetooth.Rfcomm.RfcommServiceId.serialPort),
+    // gatt.GattDeviceService.getDeviceSelectorFromUuid
+    // Windows.Devices.Bluetooth.BluetoothLEDevice.getDeviceSelector( selector )
+    //var thisSelector = "System.Devices.AepService.ServiceClassId:=\"{781aee18-7733-4ce4-add0-91f41c67b592}\""; //781aee18-7733-4ce4-add0-91f41c67b592
+    //System.Devices.DevObjectType:=10 AND 
+    //AND System.Devices.AepService.ServiceClassId:=\"{6E3BB679-4372-40C8-9EAA-4509DF260CD8}\"
+    //AND System.Devices.AepService.Bluetooth.ServiceGuid:=\"{4FB69667-EB9C-4739-92E2-6908642B1CD0}\"
+
+    deviceInfo.findAllAsync( selector5, null).done( //selector, reqProperties
         function ( devices ) {
             if ( devices.length > 0 ) {
-                isInitialized = true;
-                success( devices[0] );
+
+               // success( devices[0] );
             } else {
                 failure( { error: "initialize", message: "No BLE devices found." } );
             }
@@ -53,12 +61,15 @@ function startWatcher() {
 
     var reqProperties = [];
     reqProperties[0] = "System.Devices.Aep.DeviceAddress";
-    reqProperties[1] = "System.Devices.Aep.IsConnected";
-    reqProperties[2] = "System.Devices.Aep.SignalStrength";
-
+    reqProperties[1] = "System.Devices.AepService.ServiceClassId"; //System.Devices.Aep.IsConnected
+    reqProperties[2] = "System.Devices.Aep.SignalStrength"; //System.Devices.AepService.Bluetooth.ServiceGuid
+    reqProperties[3] = "System.Devices.Aep.Category";
+    //reqProperties[4] = "System.Devices.ModelName";
+    //reqProperties[5] = "System.Devices.CategoryIds";
+    //reqProperties[6] = "System.Devices.AepService.ProtocolId";
 
     if ( !deviceWatcher ) {
-        deviceWatcher = DevEnum.DeviceInformation.createWatcher( selector, reqProperties, kind );
+        deviceWatcher = devEnum.DeviceInformation.createWatcher( selector, reqProperties, kind );
 
         // Add event handlers
         deviceWatcher.addEventListener( "added", onAdded, false );
@@ -99,8 +110,8 @@ function stopWatcher() {
         deviceWatcher.removeEventListener( "enumerationcompleted", onEnumerationCompleted );
         deviceWatcher.removeEventListener( "stopped", onStopped );
 
-        if ( DevEnum.DeviceWatcherStatus.started === deviceWatcher.status ||
-            DevEnum.DeviceWatcherStatus.enumerationCompleted === deviceWatcher.status ) {
+        if ( devEnum.DeviceWatcherStatus.started === deviceWatcher.status ||
+            devEnum.DeviceWatcherStatus.enumerationCompleted === deviceWatcher.status ) {
             deviceWatcher.stop();
             deviceWatcher = undefined;
             console.log( "Watcher stopped..." );
@@ -123,7 +134,6 @@ function onAdded( devinfo ) {
         name: devinfo.name,
         rssi: 0
     };
-    var rssi = 0;
 
     if ( !devinfo.name ) {
         thisDevice.name = "Unknown";
@@ -256,9 +266,9 @@ function pairDevice( deviceID, success, failure ) {
         WATCH_CACHE[deviceID].ble.deviceInformation.pairing.pairAsync( DPPL.none ).done(
             function ( pairingResult ) {
                 if ( connectTimer ) { clearTimeout( connectTimer ); }
-                pMsg = returnEnum( pairingResult.status, DevEnum.DevicePairingResultStatus );
+                pMsg = returnEnum( pairingResult.status, devEnum.DevicePairingResultStatus );
                 console.log( "Pairing result with " + WATCH_CACHE[deviceID].device.name + " = " + pMsg );
-                if ( pairingResult.status === DevEnum.DevicePairingResultStatus.paired ) {
+                if ( pairingResult.status === devEnum.DevicePairingResultStatus.paired ) {
                     success( deviceID );
                 } else if ( pairingResult.status === 19 ) {
                     failure( pMsg );
@@ -466,10 +476,11 @@ module.exports = {
         //WATCH_CACHE = {};
 
         if ( args[0] && args[0].length > 0 ) {
-            serviceUuidFilter = "{" + args[0].toString() + "}"; //thisServiceFilter
+            //serviceUuidFilter = "System.Devices.AepService.ServiceClassId:=\"{" + args[0].toString() + "}"; //thisServiceFilter
+            serviceUuidFilter = args[0].toString();
             //serviceUuidFilter = getSelector( thisServiceFilter ); //returns serviceUuidFilter
-        }
-
+            //initializeDevice( serviceUuidFilter, success, failure );
+        } 
         startWatcher();
 
         if ( scanTime && scanTime > 0 ) {
@@ -896,33 +907,45 @@ module.exports = {
     },
 
     isEnabled: function ( success, failure ) {
-        var access;
-        var adapter;
-        var btradio;
 
-        try {
-            Windows.Devices.Radios.Radio.requestAccessAsync().then( function ( access ) {
-                if ( access !== Windows.Devices.Radios.RadioAccessStatus.allowed ) {
-                    failure( "Access to bluetooth radio not allowed" );
-                } else {
-                    bluetooth.BluetoothAdapter.getDefaultAsync().then( function ( adapter ) {
-                        if ( adapter !== null ) {
-                            adapter.getRadioAsync().then( function ( btRadio ) {
-                                if ( btRadio.state === Windows.Devices.Radios.RadioState.on ) {
-                                    success();
-                                } else {
-                                    failure( "Bluetooth is not enabled" );
-                                }
-                            } );
-                        } else {
-                            failure( "No bluetooth radio found" );
+        Windows.Devices.Radios.Radio.requestAccessAsync().then(
+            function ( access ) {
+                if ( access === Windows.Devices.Radios.RadioAccessStatus.allowed ) {
+
+                    bluetooth.BluetoothAdapter.getDefaultAsync().then(
+                        function ( adapter ) {
+                            if ( adapter !== null ) {
+                                adapter.getRadioAsync().done(
+                                    function ( btRadio ) {
+                                        if ( btRadio.state === Windows.Devices.Radios.RadioState.on ) {
+                                            success();
+                                        } else {
+                                            var accessFail = returnEnum( btRadio.state, Windows.Devices.Radios.RadioState );
+                                            failure( "Bluetooth radio failure: " + accessFail );
+                                        }
+                                    },
+                                    function ( error ) {
+                                        failure( error );
+                                    }
+                                );
+                            } else {
+                                failure( "No bluetooth radio found" );
+                            }
+                        },
+                        function ( error ) {
+                            failure( error );
                         }
-                    } );
+                    );
+                } else {
+                    var accessFail = returnEnum( access, Windows.Devices.Radios.RadioAccessStatus );
+                    failure( "Access to bluetooth radio rejected: " + accessFail);
                 }
-            } ).done();
-        } catch ( err ) {
-            failure( "Connection to bluetooth failed: " + err );
-        }
+            },
+            function ( error ) {
+                failure( error );
+            }
+        );
+
     },
 
     enable: function ( success, failure ) {
