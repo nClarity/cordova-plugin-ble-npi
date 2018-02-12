@@ -4,6 +4,7 @@ var gatt = Windows.Devices.Bluetooth.GenericAttributeProfile;
 var devEnum = Windows.Devices.Enumeration;
 
 var deviceWatcher;
+var advWatcher;
 var WATCH_CACHE = {};
 var serviceUuidFilter = null;
 var successFn;
@@ -11,6 +12,83 @@ var failureFn;
 
 var scanTimer;
 var connectTimer;
+
+// *** BLE ADVERTISING SECTION ***
+function startAdvWatcher() {
+    advWatcher = bluetooth.Advertisement.BluetoothLEAdvertisementWatcher();
+    advWatcher.addEventListener( "received", onAdvertisementReceived, false );
+    advWatcher.addEventListener( "stopped", onAdvertisementWatcherStopped, false );
+
+    console.log( "Starting ADV watcher." );
+    advWatcher.start();
+}
+
+function stopAdvWatcher() {
+    var stopsuccess = true;
+    console.log( "Stopping advertising watcher." );
+
+    if ( advWatcher && advWatcher !== undefined ) {
+        advWatcher.removeEventListener( "received", onAdvertisementReceived );
+        advWatcher.removeEventListener( "stopped", onAdvertisementWatcherStopped );
+
+        if ( devEnum.DeviceWatcherStatus.started === advWatcher.status ||
+            devEnum.DeviceWatcherStatus.enumerationCompleted === advWatcher.status ) {
+            advWatcher.stop();
+            advWatcher = undefined;
+            console.log( "Watcher stopped..." );
+        }
+    } else {
+        stopsuccess = false;
+    }
+    return stopsuccess;
+}
+
+function onSuspending( args ) {
+    // Make sure to stop the watcher on suspend.
+    watcher.stop();
+    // Always unregister the handlers to release the resources to prevent leaks.
+    watcher.removeEventListener( "received", onAdvertisementReceived );
+    watcher.removeEventListener( "stopped", onAdvertisementWatcherStopped );
+
+    console.log( "App suspending. ADV Watcher stopped." );
+}
+
+function onResuming( args ) {
+    watcher.addEventListener( "received", onAdvertisementReceived, false );
+    watcher.addEventListener( "stopped", onAdvertisementWatcherStopped, false );
+}
+
+function onAdvertisementReceived( device ) {
+    // We can obtain various information about the advertisement we just received by accessing 
+    // the properties of the EventArgs class
+
+    var serviceUuids = device.advertisement.serviceUuids;
+
+    function foundDevice() {
+        bluetooth.BluetoothLEDevice.fromBluetoothAddressAsync( device.bluetoothAddress ).done(
+            function ( bleDevice ) {
+                cacheOps( [bleDevice, device], "Advertisement" );
+            },
+            function ( error ) {
+                failureFn( error );
+            }
+        );
+    }
+
+    if ( serviceUuids.length > 0 ) {
+        for ( var j = 0; j < serviceUuids.length; j++ ) {
+            if ( serviceUuidFilter.toUpperCase() === serviceUuids[j].toUpperCase() ) {
+                //We found the device or service we are looking for, return information
+                foundDevice();
+            }
+        }
+    }
+}
+
+function onAdvertisementWatcherStopped( eventArgs ) {
+    // Notify the user that the watcher was stopped
+    console.log( "Watcher stopped or aborted: " + eventArgs.error.toString() );
+}
 
 // *** DEVICE ENUMERATION SECTION ***
 
@@ -37,11 +115,11 @@ function initializeDevice( selector, success, failure ) {
     //AND System.Devices.AepService.ServiceClassId:=\"{6E3BB679-4372-40C8-9EAA-4509DF260CD8}\"
     //AND System.Devices.AepService.Bluetooth.ServiceGuid:=\"{4FB69667-EB9C-4739-92E2-6908642B1CD0}\"
 
-    deviceInfo.findAllAsync( selector5, null).done( //selector, reqProperties
+    deviceInfo.findAllAsync( selector5, null ).done( //selector, reqProperties
         function ( devices ) {
             if ( devices.length > 0 ) {
 
-               // success( devices[0] );
+                // success( devices[0] );
             } else {
                 failure( { error: "initialize", message: "No BLE devices found." } );
             }
@@ -55,20 +133,17 @@ function startWatcher() {
     var DeviceWatcherStatus = Windows.Devices.Enumeration.DeviceWatcherStatus;
     // Get the device selector chosen by the UI then add additional constraints for devices that
     // can be paired or are already paired.
-    var selector = "System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\""; //BLE
-
+    var selector = "System.Devices.Aep.ProtocolId:=\"{bb7bb05e-5972-42b5-94fc-76eaa7084d49}\""; //BLE;
     var kind = Windows.Devices.Enumeration.DeviceInformationKind.associationEndpoint;
-
     var reqProperties = [];
     reqProperties[0] = "System.Devices.Aep.DeviceAddress";
-    reqProperties[1] = "System.Devices.AepService.ServiceClassId"; //System.Devices.Aep.IsConnected
-    reqProperties[2] = "System.Devices.Aep.SignalStrength"; //System.Devices.AepService.Bluetooth.ServiceGuid
+    reqProperties[1] = "System.Devices.AepService.ServiceClassId";
+    reqProperties[2] = "System.Devices.Aep.SignalStrength";
     reqProperties[3] = "System.Devices.Aep.Category";
-    //reqProperties[4] = "System.Devices.ModelName";
-    //reqProperties[5] = "System.Devices.CategoryIds";
-    //reqProperties[6] = "System.Devices.AepService.ProtocolId";
+    reqProperties[4] = "System.Devices.ClassGuid";
 
     if ( !deviceWatcher ) {
+
         deviceWatcher = devEnum.DeviceInformation.createWatcher( selector, reqProperties, kind );
 
         // Add event handlers
@@ -94,15 +169,15 @@ function startWatcher() {
             console.log( 'Scan already in progress' );
         }
     }
-    return;
+
 }
 
 function stopWatcher() {
     var stopsuccess = true;
-    
+
     clearTimeout( scanTimer );
 
-    if ( deviceWatcher !== undefined ) {
+    if ( deviceWatcher && deviceWatcher !== undefined ) {
         console.log( "Stopping watcher" );
         deviceWatcher.removeEventListener( "added", onAdded );
         deviceWatcher.removeEventListener( "updated", onUpdated );
@@ -152,7 +227,7 @@ function onAdded( devinfo ) {
                 failure: {}
             };
             WATCH_CACHE[devinfo.id].services = {}; //.characteristics = {}; .descriptors
-            console.log( "Enumeration found: " + devinfo.name + "  >>>  " + devinfo.id );
+            console.log( "Enumeration found: " + thisDevice.name + "  >>>  " + devinfo.id );
         }
     }
 
@@ -169,7 +244,7 @@ function onAdded( devinfo ) {
                             if ( devinfo.name === "Unknown" ) {
                                 WATCH_CACHE[devinfo.id].deviceInfo.name = bleDevice.name;
                             }
-                            console.log( "Searching ServiceUuid: {" + services[0].uuid + "} - found a matching device: " + bleDevice.name + " ID: " + bleDevice.id );
+                            console.log( "Searching ServiceUuid: {" + services[0].uuid + "} - found a matching device: " + bleDevice.name + " ID: " + bleDevice.deviceId );
                             if ( scanTimer ) { clearTimeout( scanTimer ); }
                             returnDevice();
                         } else {
@@ -196,14 +271,14 @@ function onAdded( devinfo ) {
         successFn( WATCH_CACHE[devinfo.id].deviceInfo, { keepCallback: true } );
     }
 
-    init();
-
-    if ( serviceUuidFilter !== null ) {
-        searchForUuid();
-    } else {
-        returnDevice();
-    }
-
+    //init();
+    //returnDevice();
+    //if ( serviceUuidFilter !== null ) {
+    //    searchForUuid();
+    //} else {
+    //    returnDevice();
+    //}
+    cacheOps( [devinfo, null], "Enumerator" );
 }
 
 function onUpdated( devUpdate ) {
@@ -233,6 +308,85 @@ function onStopped( obj ) {
     }
     console.log( 'onStopped message: ' + msg );
     console.log( Object.keys( WATCH_CACHE ).length + " devices found. Watcher stopped" );
+}
+
+//*** Watcher Cache operations
+function cacheOps( arg, sender ) {
+    var devID;
+    var device = arg[0];
+    var advert = arg[1];
+
+    if ( device.deviceId ) {
+        devID = device.deviceId;
+    } else if ( device.id ) {
+        devID = device.id;
+    } else {
+        return;
+    }
+
+    //Check to see if object exists
+    if ( !WATCH_CACHE[devID] ) {
+        WATCH_CACHE[devID] = {};
+        WATCH_CACHE[devID].deviceInfo = {
+            advertising: [],
+            id: devID,
+            name: device.name,
+            rssi: -100,
+            services: []
+        };
+        WATCH_CACHE[devID].isNew = true;
+        WATCH_CACHE[devID].device = device;
+        WATCH_CACHE[devID].ble = {
+            ble: {},
+            listener: {},
+            success: {},
+            failure: {}
+        };
+        WATCH_CACHE[devID].services = {};
+
+        if ( device.properties['System.Devices.Aep.SignalStrength'] !== null ) {
+            WATCH_CACHE[devID].deviceInfo.rssi = device.properties['System.Devices.Aep.SignalStrength'];
+        }
+
+        console.log( sender + " found: " + device.name + "  >>>  " + devID );
+        returnCache();
+    }
+
+    if ( sender === "Advertisement" ) {
+        if ( WATCH_CACHE[devID].deviceInfo.advertising.length === 0 ) {
+            WATCH_CACHE[devID].deviceInfo.advertising = advert.advertisement.serviceUuids;
+            returnCache();
+        }
+    }
+}
+
+function returnCache() {
+    for ( var device in WATCH_CACHE ) {
+        if ( serviceUuidFilter === null ) {
+            if ( WATCH_CACHE[device].isNew === true ) {
+                successFn( WATCH_CACHE[device].deviceInfo, { keepCallback: true } );
+                WATCH_CACHE[device].isNew = false;
+            }
+
+        } else {
+            for ( var i = 0; i < WATCH_CACHE[device].deviceInfo.advertising.length; i++ ) {
+                if ( serviceUuidFilter.toUpperCase() === WATCH_CACHE[device].deviceInfo.advertising[i].toUpperCase() ) {
+                    if ( WATCH_CACHE[device].isNew === true ) {
+                        successFn( WATCH_CACHE[device].deviceInfo, { keepCallback: true } );
+                        WATCH_CACHE[device].isNew = false;
+                    }
+                }
+            }
+
+        }
+
+    }
+}
+
+function resetCache() {
+    for ( var device in WATCH_CACHE ) {
+        WATCH_CACHE[device].isNew = true;
+    }
 }
 
 //**GATT Functions
@@ -292,7 +446,7 @@ function setBLEStatusListener( bleDevice, success, failure ) {
             result.status = "disconnected";
             if ( bleDevice.ble ) {
                 bleDevice.ble.removeEventListener( 'connectionstatuschanged', bleDevice.listener );
-                failure( result );
+                success( result );
             }
         }
     };
@@ -430,7 +584,8 @@ function getAllCharacteristics( service, callback ) {
     }
 }
 
-function checkUuid(uuid) {
+//***HELPERS***
+function checkUuid( uuid ) {
     if ( uuid.length == 4 ) {
         return "0000" + uuid + "-0000-1000-8000-00805F9B34FB";
     } else {
@@ -438,7 +593,6 @@ function checkUuid(uuid) {
     }
 }
 
-//***HELPERS***
 function onValueChanged( eventArgs, callback ) {
     var data = ua2hex( new Uint8Array( eventArgs.characteristicValue ) );
     console.log( "New value: " + data.toString() );
@@ -447,12 +601,14 @@ function onValueChanged( eventArgs, callback ) {
 
 function returnEnum( result, object ) {
     var answer = -1;
-    Object.keys( object ).forEach( function ( key ) {
-        var value = object[key];
-        if ( value === result ) {
-            answer = key.toString();
+    Object.keys( object ).forEach(
+        function ( key ) {
+            var value = object[key];
+            if ( value === result ) {
+                answer = key.toString();
+            }
         }
-    } );
+    );
     return answer;
 }
 
@@ -468,24 +624,27 @@ function ua2hex( ua ) {
 module.exports = {
 
     scan: function ( success, failure, args ) {
-        //var thisServiceFilter = null;
+
         var scanTime = args[1] * 1000;
         serviceUuidFilter = null;
         successFn = success;
         failureFn = failure;
-        //WATCH_CACHE = {};
+
+        resetCache();
 
         if ( args[0] && args[0].length > 0 ) {
-            //serviceUuidFilter = "System.Devices.AepService.ServiceClassId:=\"{" + args[0].toString() + "}"; //thisServiceFilter
             serviceUuidFilter = args[0].toString();
-            //serviceUuidFilter = getSelector( thisServiceFilter ); //returns serviceUuidFilter
-            //initializeDevice( serviceUuidFilter, success, failure );
-        } 
+            startAdvWatcher();
+        }
+
+        returnCache();
+
         startWatcher();
 
         if ( scanTime && scanTime > 0 ) {
             scanTimer = setTimeout(
                 function () {
+                    stopAdvWatcher();
                     stopWatcher();
                 }, scanTime );
         }
@@ -545,12 +704,25 @@ module.exports = {
             WATCH_CACHE[deviceID].ble.ble = bleDevice; //Cache device for reference
             WATCH_CACHE[deviceID].services = {};
             getGATTServices( bleDevice, bluetooth.BluetoothCacheMode.uncached, cacheGatt, failure );
+
+        }
+
+        function connectBLE() {
+            WATCH_CACHE[deviceID].ble.ble.requestAccessAsync().done(
+                function ( result ) {
+                    if ( result === bluetooth.BluetoothConnectionStatus.connected ) {
+                        gatt( WATCH_CACHE[deviceID].ble.ble );
+                    }
+                },
+                function ( error ) {
+                    failure( error );
+                }
+            );
         }
 
 
-        if ( WATCH_CACHE[deviceID].ble.ble.connectionStatus === bluetooth.BluetoothConnectionStatus.connected ) {
-            bleDevice = WATCH_CACHE[deviceID].ble.ble;
-            gatt( bleDevice );
+        if ( WATCH_CACHE[deviceID].ble.ble && WATCH_CACHE[deviceID].ble.ble.connectionStatus === bluetooth.BluetoothConnectionStatus.connected ) {
+            gatt( WATCH_CACHE[deviceID].ble.ble );
         } else {
             getBLE( deviceID, gatt, failure ); //Step 1
         }
@@ -560,21 +732,10 @@ module.exports = {
     disconnect: function ( success, failure, args ) {
         var deviceID = args[0];
 
-        stopWatcher();
-
-        //Loop through each service and characterisitc and turn off any event listeners
-
-        //for ( var svc in WATCH_CACHE[deviceID].services ) {
-        //    if ( WATCH_CACHE[deviceID].services[svc].service.session.sessionStatus === gatt.GattSessionStatus.active ) {
-        //        WATCH_CACHE[deviceID].services[svc].service.close();
-        //        console.log( "Closing service: " + WATCH_CACHE[deviceID].services[svc].service.uuid );
-        //    }
-        //}
-
         console.log( "Removing event listener for BLE connection" );
-        //WATCH_CACHE[deviceID].ble.ble.removeEventListener( 'connectionstatuschanged', WATCH_CACHE[deviceID].ble.listener );
+        WATCH_CACHE[deviceID].ble.ble.removeEventListener( 'connectionstatuschanged', WATCH_CACHE[deviceID].ble.listener );
         WATCH_CACHE[deviceID].ble.ble.close();
-
+        WATCH_CACHE[deviceID].ble.ble = undefined;
         success( deviceID );
     },
 
@@ -593,7 +754,7 @@ module.exports = {
         var guid = checkUuid( characteristics.READ_TIMER );
 
         function thisReader( characteristic ) {
-            if ( characteristic === false || characteristic.message) {
+            if ( characteristic === false || characteristic.message ) {
                 failure( "Unable to map charcterisitcs for reading" );
                 return;
             }
@@ -860,10 +1021,10 @@ module.exports = {
 
         var uuid = checkUuid( characteristics.SYSTEM );
         var guid = checkUuid( characteristics.READ_TIMER );
-		
+
         var characteristic = WATCH_CACHE[deviceID].services[uuid].characteristics[guid].characteristic;
 
-            if ( characteristic && WATCH_CACHE[deviceID].services[uuid].service.session.sessionStatus === gatt.GattSessionStatus.active ) {
+        if ( characteristic && WATCH_CACHE[deviceID].services[uuid].service.session.sessionStatus === gatt.GattSessionStatus.active ) {
             console.log( "Stop Notification for service: " + uuid + " >>> characteristic: " + guid );
             characteristic.onvaluechanged = null;
             //characteristic.removeEventListener( "valueChanged", onValueChanged );
@@ -938,7 +1099,7 @@ module.exports = {
                     );
                 } else {
                     var accessFail = returnEnum( access, Windows.Devices.Radios.RadioAccessStatus );
-                    failure( "Access to bluetooth radio rejected: " + accessFail);
+                    failure( "Access to bluetooth radio rejected: " + accessFail );
                 }
             },
             function ( error ) {
