@@ -275,12 +275,13 @@ function cacheOps( arg, sender ) {
         returnCache();
     }
 
-    if ( sender === "Advertisement" ) {
-
-        if ( WATCH_CACHE[devID].deviceInfo.name !== device.name && device.name !== "" ) {
+    if ( WATCH_CACHE[devID].deviceInfo.name !== device.name || WATCH_CACHE[devID].deviceInfo.name === "" ) {
+        if ( device.name !== "" ) {
             WATCH_CACHE[devID].deviceInfo.name = device.name;
         }
+    }
 
+    if ( sender === "Advertisement" ) {
         if ( WATCH_CACHE[devID].deviceInfo.advertising.length === 0 ) {
             WATCH_CACHE[devID].deviceInfo.advertising = advert.advertisement.serviceUuids;
             returnCache();
