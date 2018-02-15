@@ -201,83 +201,6 @@ function stopWatcher() {
 
 function onAdded( devinfo ) {
 
-    var thisDevice = {
-        advertising: {
-            services: []
-        },
-        id: devinfo.id,
-        name: devinfo.name,
-        rssi: 0
-    };
-
-    if ( !devinfo.name ) {
-        thisDevice.name = "Unknown";
-    }
-
-    //Initialize our BLE object
-    function init() {
-        if ( !WATCH_CACHE[devinfo.id] ) {
-            WATCH_CACHE[devinfo.id] = {};
-            WATCH_CACHE[devinfo.id].deviceInfo = thisDevice;
-            WATCH_CACHE[devinfo.id].device = devinfo;
-            WATCH_CACHE[devinfo.id].ble = {
-                ble: {},
-                listener: {},
-                success: {},
-                failure: {}
-            };
-            WATCH_CACHE[devinfo.id].services = {}; //.characteristics = {}; .descriptors
-            console.log( "Enumeration found: " + thisDevice.name + "  >>>  " + devinfo.id );
-        }
-    }
-
-    function searchForUuid() {
-
-        function checkUuid( bleDevice ) {
-
-            bleDevice.getGattServicesForUuidAsync( serviceUuidFilter ).done(
-                function ( result ) {
-                    if ( result.status === gatt.GattCommunicationStatus.success ) {
-                        var services = result.services;
-                        if ( result.services.length > 0 ) {
-                            WATCH_CACHE[devinfo.id].ble.ble = bleDevice;
-                            if ( devinfo.name === "Unknown" ) {
-                                WATCH_CACHE[devinfo.id].deviceInfo.name = bleDevice.name;
-                            }
-                            console.log( "Searching ServiceUuid: {" + services[0].uuid + "} - found a matching device: " + bleDevice.name + " ID: " + bleDevice.deviceId );
-                            if ( scanTimer ) { clearTimeout( scanTimer ); }
-                            returnDevice();
-                        } else {
-                            bleDevice.close();
-                            console.log( "Device: " + bleDevice.name + " is not a match" );
-                        }
-                    }
-                },
-                function ( error ) {
-                    console.log( "Failure getting GATT for: " + bleDevice.name );
-                }
-            );
-        }
-
-        getBLE( devinfo.id, checkUuid, returnDevice );
-    }
-
-    function returnDevice() {
-
-        if ( devinfo.properties['System.Devices.Aep.SignalStrength'] !== null ) {
-            WATCH_CACHE[devinfo.id].rssi = devinfo.properties['System.Devices.Aep.SignalStrength'];
-        }
-
-        successFn( WATCH_CACHE[devinfo.id].deviceInfo, { keepCallback: true } );
-    }
-
-    //init();
-    //returnDevice();
-    //if ( serviceUuidFilter !== null ) {
-    //    searchForUuid();
-    //} else {
-    //    returnDevice();
-    //}
     cacheOps( [devinfo, null], "Enumerator" );
 }
 
@@ -353,6 +276,11 @@ function cacheOps( arg, sender ) {
     }
 
     if ( sender === "Advertisement" ) {
+
+        if ( WATCH_CACHE[devID].deviceInfo.name !== device.name && device.name !== "" ) {
+            WATCH_CACHE[devID].deviceInfo.name = device.name;
+        }
+
         if ( WATCH_CACHE[devID].deviceInfo.advertising.length === 0 ) {
             WATCH_CACHE[devID].deviceInfo.advertising = advert.advertisement.serviceUuids;
             returnCache();
