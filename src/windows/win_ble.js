@@ -278,6 +278,7 @@ function cacheOps( arg, sender ) {
     if ( WATCH_CACHE[devID].deviceInfo.name !== device.name || WATCH_CACHE[devID].deviceInfo.name === "" ) {
         if ( device.name !== "" ) {
             WATCH_CACHE[devID].deviceInfo.name = device.name;
+            returnCache();
         }
     }
 
