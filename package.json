@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://gitlab.com/npi-cordova/cordova-plugin-ble-npi.git"
+    "url": "git+https://github.com/npinnovations/cordova-plugin-ble-npi.git"
   },
   "keywords": [
     "cordova",
@@ -28,7 +28,7 @@
   "author": "Buck Taylor <buck@roltay.com>",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://gitlab.com/npi-cordova/cordova-plugin-ble-npi/issues"
+    "url": "https://github.com/npinnovations/cordova-plugin-ble-npi/issues"
   },
-  "homepage": "https://gitlab.com/npi-cordova/cordova-plugin-ble-npi#readme"
+  "homepage": "https://github.com/npinnovations/cordova-plugin-ble-npi#readme"
 }
