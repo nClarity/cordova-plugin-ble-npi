@@ -14,7 +14,7 @@
     <issue>https://github.com/npinnovations/cordova-plugin-ble-npi/issues</issue>
 
     <js-module src="www/ble.js" name="ble">
-        <clobbers target="windows.ble" />
+        <clobbers target="ble" />
     </js-module>
 
     <platform name="ios">
