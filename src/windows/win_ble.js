@@ -278,6 +278,7 @@ function cacheOps( arg, sender ) {
     if ( WATCH_CACHE[devID].deviceInfo.name !== device.name || WATCH_CACHE[devID].deviceInfo.name === "" ) {
         if ( device.name !== "" ) {
             WATCH_CACHE[devID].deviceInfo.name = device.name;
+            WATCH_CACHE[devID].isNew = true;
             returnCache();
         }
     }
@@ -285,6 +286,7 @@ function cacheOps( arg, sender ) {
     if ( sender === "Advertisement" ) {
         if ( WATCH_CACHE[devID].deviceInfo.advertising.length === 0 ) {
             WATCH_CACHE[devID].deviceInfo.advertising = advert.advertisement.serviceUuids;
+            WATCH_CACHE[devID].isNew = true;
             returnCache();
         }
     }
