@@ -16,7 +16,7 @@
     <dependency id="cordova-plugin-compat" version="^1.1.0" />
 
     <js-module src="www/ble.js" name="ble">
-        <clobbers target="ble" />
+        <clobbers target="windows.ble" />
     </js-module>
 
     <platform name="ios">
