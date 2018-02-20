@@ -37,7 +37,7 @@
         <!-- frameworks -->
         <framework src="CoreBluetooth.framework" />
 
-        <preference name="BLUETOOTH_USAGE_DESCRIPTION" default="Connect to iManifold/iConnect" />
+        <preference name="BLUETOOTH_USAGE_DESCRIPTION" default="Connect_to_iManifold/iConnect" />
         <config-file target="*-Info.plist" parent="NSBluetoothPeripheralUsageDescription">
             <string>$BLUETOOTH_USAGE_DESCRIPTION</string>
         </config-file>
