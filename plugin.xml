@@ -37,7 +37,7 @@
         <!-- frameworks -->
         <framework src="CoreBluetooth.framework" />
 
-        <preference name="BLUETOOTH_USAGE_DESCRIPTION" default=" " />
+        <preference name="BLUETOOTH_USAGE_DESCRIPTION" default="Connect to iManifold/iConnect" />
         <config-file target="*-Info.plist" parent="NSBluetoothPeripheralUsageDescription">
             <string>$BLUETOOTH_USAGE_DESCRIPTION</string>
         </config-file>
@@ -94,9 +94,6 @@
       <js-module src="src/windows/win_ble.js" name="WinBleProxy">
         <merges target="" />
       </js-module>
-      <!--<js-module src="src/windows/displayhelpers.js" name="DisplayHelpers">
-        <merges target="" />
-      </js-module>-->
       <config-file target="package.Windows10.appxmanifest" parent="/Package/Capabilities">
         <DeviceCapability Name="bluetooth" />
         <DeviceCapability Name="radios" />
