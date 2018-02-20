@@ -3,7 +3,7 @@
     xmlns="http://www.phonegap.com/ns/plugins/1.0"
     xmlns:android="http://schemas.android.com/apk/res/android"
     id="cordova-plugin-ble-npi"
-    version="1.1.6">
+    version="1.1.7">
 
     <name>BLE</name>
     <description>Bluetooth Low Energy (BLE) Central Plugin</description>
@@ -92,7 +92,7 @@
     <!-- Windows universal apps (Windows 10) -->
     <platform name="windows">
       <js-module src="src/windows/win_ble.js" name="WinBleProxy">
-        <merges target="" />
+        <runs />
       </js-module>
       <config-file target="package.Windows10.appxmanifest" parent="/Package/Capabilities">
         <DeviceCapability Name="bluetooth" />
