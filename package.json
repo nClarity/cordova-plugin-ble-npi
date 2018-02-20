@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-ble-npi",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "description": "Bluetooth Low-Energy Communication Plugin",
   "cordova": {
     "id": "cordova-plugin-ble-npi",
