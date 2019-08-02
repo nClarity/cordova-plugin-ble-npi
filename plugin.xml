@@ -17,6 +17,7 @@
         <clobbers target="ble" />
     </js-module>
 
+  
     <platform name="ios">
 
         <config-file target="config.xml" parent="/widget">
