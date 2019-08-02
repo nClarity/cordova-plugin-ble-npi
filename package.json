@@ -1,6 +1,6 @@
 {
   "name": "cordova-plugin-ble-npi",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "Bluetooth Low-Energy Communication Plugin",
   "cordova": {
     "id": "cordova-plugin-ble-npi",
@@ -25,7 +25,7 @@
     "nBlue",
     "ecosystem:cordova"
   ],
-  "author": "Buck Taylor <buck@roltay.com>",
+  "author": "Avijeet Mishra <avijeet@npinnovations.com>",
   "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/npinnovations/cordova-plugin-ble-npi/issues"
