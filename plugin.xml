@@ -1,17 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <plugin xmlns="http://www.phonegap.com/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android" id="cordova-plugin-ble-npi" version="1.2.0">
-
     <name>BLE</name>
     <description>Bluetooth Low Energy (BLE) Central Plugin</description>
     <license>Apache 2.0</license>
     <keywords>bluetooth, BLE, bluetooth low energy, bluetooth smart</keywords>
     <repo>https://github.com/nClarity/cordova-plugin-ble-npi.git</repo>
     <issue>https://github.com/nClarity/cordova-plugin-ble-npi/issues</issue>
-
     <js-module src="www/ble.js" name="ble">
         <clobbers target="ble" />
-    </js-module>   
-  
+    </js-module>    
     <platform name="ios">
         <config-file target="config.xml" parent="/widget">
             <feature name="BLE">
@@ -24,12 +21,6 @@
         <source-file src="src/ios/CBPeripheral+Extensions.m" target-dir="BLECentralPlugin" />
         <header-file src="src/ios/BLECommandContext.h" target-dir="BLECentralPlugin" />
         <source-file src="src/ios/BLECommandContext.m" target-dir="BLECentralPlugin" />
-        
-        <!-- frameworks -->
-        <!--      
-        <framework src="iOSDFULibrary" type="podspec" spec="~> 4.1.2"/>
-        <hook type="before_plugin_install" src="hooks/ios_pod_extra_settings.js" />
-        -->
         <framework src="CoreBluetooth.framework" />
         <podspec>
             <config>
@@ -39,48 +30,45 @@
                 <pod name="iOSDFULibrary" spec="~> 4.11.1" />
             </pods>
         </podspec>
-
         <preference name="BLUETOOTH_USAGE_DESCRIPTION" default="Connect_to_iManifold/iConnect" />
         <config-file target="*-Info.plist" parent="NSBluetoothPeripheralUsageDescription">
             <string>$BLUETOOTH_USAGE_DESCRIPTION</string>
         </config-file>
     </platform>
-
-  <platform name="android">
-    <config-file target="res/xml/config.xml" parent="/widget">
-      <feature name="BLE">
-        <param name="android-package" value="com.megster.cordova.ble.central.BLECentralPlugin"/>
-      </feature>
-    </config-file>
-
-    <config-file target="AndroidManifest.xml" parent="/manifest">
-      <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-      <uses-permission android:name="android.permission.BLUETOOTH"/>
-      <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>
-    </config-file>
-    <config-file target="AndroidManifest.xml" parent="/manifest/application">
-      <activity android:name="com.megster.cordova.ble.central.NotificationActivity" />
-      <service android:name="com.megster.cordova.ble.central.DfuService" />
-    </config-file>
-    <framework src="no.nordicsemi.android:dfu:1.1.1"/>
-    <source-file src="src/android/BLECentralPlugin.java"
-        target-dir="src/com/megster/cordova/ble/central"/>
-    <source-file src="src/android/BLECommand.java"
-        target-dir="src/com/megster/cordova/ble/central"/>
-    <source-file src="src/android/Peripheral.java"
-        target-dir="src/com/megster/cordova/ble/central"/>
-    <source-file src="src/android/Helper.java"
-        target-dir="src/com/megster/cordova/ble/central"/>
-    <source-file src="src/android/UUIDHelper.java"
-        target-dir="src/com/megster/cordova/ble/central"/>
-    <source-file src="src/android/DfuService.java"
-        target-dir="src/com/megster/cordova/ble/central"/>
-    <source-file src="src/android/NotificationActivity.java"
-        target-dir="src/com/megster/cordova/ble/central"/>
-  </platform>    
-  <!-- because of <framework type="podspec"> for iOS -->
-  <engines>
-    <engine name="cordova" version=">=6.4.0"/>
-    <engine name="cordova-ios" version=">=4.3.0"/>
-  </engines>
+    <platform name="android">
+        <config-file target="res/xml/config.xml" parent="/widget">
+        <feature name="BLE">
+            <param name="android-package" value="com.megster.cordova.ble.central.BLECentralPlugin"/>
+        </feature>
+        </config-file>
+        <config-file target="AndroidManifest.xml" parent="/manifest">
+        <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+        <uses-permission android:name="android.permission.BLUETOOTH"/>
+        <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>
+        </config-file>
+        <config-file target="AndroidManifest.xml" parent="/manifest/application">
+        <activity android:name="com.megster.cordova.ble.central.NotificationActivity" />
+        <service android:name="com.megster.cordova.ble.central.DfuService" />
+        </config-file>
+        <framework src="no.nordicsemi.android:dfu:1.1.1"/>
+        <source-file src="src/android/BLECentralPlugin.java"
+            target-dir="src/com/megster/cordova/ble/central"/>
+        <source-file src="src/android/BLECommand.java"
+            target-dir="src/com/megster/cordova/ble/central"/>
+        <source-file src="src/android/Peripheral.java"
+            target-dir="src/com/megster/cordova/ble/central"/>
+        <source-file src="src/android/Helper.java"
+            target-dir="src/com/megster/cordova/ble/central"/>
+        <source-file src="src/android/UUIDHelper.java"
+            target-dir="src/com/megster/cordova/ble/central"/>
+        <source-file src="src/android/DfuService.java"
+            target-dir="src/com/megster/cordova/ble/central"/>
+        <source-file src="src/android/NotificationActivity.java"
+            target-dir="src/com/megster/cordova/ble/central"/>
+    </platform>    
+    <!-- because of <framework type="podspec"> for iOS -->
+    <engines>
+        <engine name="cordova" version=">=6.4.0"/>
+        <engine name="cordova-ios" version=">=4.3.0"/>
+    </engines>
 </plugin>
