@@ -1,49 +1,50 @@
 <?xml version="1.0" encoding="utf-8"?>
-<plugin
-    xmlns="http://www.phonegap.com/ns/plugins/1.0"
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    id="cordova-plugin-ble-npi"
-    version="1.1.8">
+<plugin xmlns="http://www.phonegap.com/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android" id="cordova-plugin-ble-npi" version="1.2.0">
 
-  <name>BLE</name>
-  <description>Bluetooth Low Energy (BLE) Central Plugin</description>
-  <license>Apache 2.0</license>
-  <keywords>bluetooth, BLE, bluetooth low energy, bluetooth smart</keywords>
+    <name>BLE</name>
+    <description>Bluetooth Low Energy (BLE) Central Plugin</description>
+    <license>Apache 2.0</license>
+    <keywords>bluetooth, BLE, bluetooth low energy, bluetooth smart</keywords>
+    <repo>https://github.com/nClarity/cordova-plugin-ble-npi.git</repo>
+    <issue>https://github.com/nClarity/cordova-plugin-ble-npi/issues</issue>
 
-  <repo>https://github.com/npinnovations/cordova-plugin-ble-npi.git</repo>
-  <issue>https://github.com/npinnovations/cordova-plugin-ble-npi/issues</issue>
-
-  <js-module src="www/ble.js" name="ble">
-    <clobbers target="ble" />
-  </js-module>
-
+    <js-module src="www/ble.js" name="ble">
+        <clobbers target="ble" />
+    </js-module>   
   
-  <platform name="ios">
+    <platform name="ios">
+        <config-file target="config.xml" parent="/widget">
+            <feature name="BLE">
+                <param name="ios-package" value="BLECentralPlugin" onload="true"/>
+            </feature>
+        </config-file>
+        <header-file src="src/ios/BLECentralPlugin.h" target-dir="BLECentralPlugin" />
+        <source-file src="src/ios/BLECentralPlugin.m" target-dir="BLECentralPlugin" />
+        <header-file src="src/ios/CBPeripheral+Extensions.h" target-dir="BLECentralPlugin" />
+        <source-file src="src/ios/CBPeripheral+Extensions.m" target-dir="BLECentralPlugin" />
+        <header-file src="src/ios/BLECommandContext.h" target-dir="BLECentralPlugin" />
+        <source-file src="src/ios/BLECommandContext.m" target-dir="BLECentralPlugin" />
+        
+        <!-- frameworks -->
+        <!--      
+        <framework src="iOSDFULibrary" type="podspec" spec="~> 4.1.2"/>
+        <hook type="before_plugin_install" src="hooks/ios_pod_extra_settings.js" />
+        -->
+        <framework src="CoreBluetooth.framework" />
+        <podspec>
+            <config>
+                <source url="https://github.com/CocoaPods/Specs.git"/>
+            </config>
+            <pods use-frameworks="true">
+                <pod name="iOSDFULibrary" spec="~> 4.11.1" />
+            </pods>
+        </podspec>
 
-    <config-file target="config.xml" parent="/widget">
-      <feature name="BLE">
-        <param name="ios-package" value="BLECentralPlugin" onload="true"/>
-      </feature>
-    </config-file>
-
-    <header-file src="src/ios/BLECentralPlugin.h" target-dir="BLECentralPlugin" />
-    <source-file src="src/ios/BLECentralPlugin.m" target-dir="BLECentralPlugin" />
-
-    <header-file src="src/ios/CBPeripheral+Extensions.h" target-dir="BLECentralPlugin" />
-    <source-file src="src/ios/CBPeripheral+Extensions.m" target-dir="BLECentralPlugin" />
-
-    <header-file src="src/ios/BLECommandContext.h" target-dir="BLECentralPlugin" />
-    <source-file src="src/ios/BLECommandContext.m" target-dir="BLECentralPlugin" />
-
-    <!-- frameworks -->
-    <framework src="CoreBluetooth.framework" />
-    <framework src="iOSDFULibrary" type="podspec" spec="~> 4.1.2"/>
-    <hook type="before_plugin_install" src="hooks/ios_pod_extra_settings.js" />
-    <preference name="BLUETOOTH_USAGE_DESCRIPTION" default="Connect_to_iManifold/iConnect" />
-    <config-file target="*-Info.plist" parent="NSBluetoothPeripheralUsageDescription">
-      <string>$BLUETOOTH_USAGE_DESCRIPTION</string>
-    </config-file>
-  </platform>
+        <preference name="BLUETOOTH_USAGE_DESCRIPTION" default="Connect_to_iManifold/iConnect" />
+        <config-file target="*-Info.plist" parent="NSBluetoothPeripheralUsageDescription">
+            <string>$BLUETOOTH_USAGE_DESCRIPTION</string>
+        </config-file>
+    </platform>
 
   <platform name="android">
     <config-file target="res/xml/config.xml" parent="/widget">
@@ -76,39 +77,7 @@
         target-dir="src/com/megster/cordova/ble/central"/>
     <source-file src="src/android/NotificationActivity.java"
         target-dir="src/com/megster/cordova/ble/central"/>
-  </platform>
-
-  <platform name="browser">
-    <js-module src="src/browser/BLECentralPlugin.js" name="BLECentralPlugin">
-      <merges target="ble" />
-    </js-module>
-  </platform>
-
-  <platform name="wp8">
-    <config-file target="config.xml" parent="/*">
-      <feature name="BLE">
-        <param name="wp-package" value="BLECentralPlugin"/>
-      </feature>
-    </config-file>
-
-    <config-file target="Properties/WMAppManifest.xml" parent="/Deployment/App/Capabilities">
-      <Capability Name="ID_CAP_PROXIMITY" />
-    </config-file>
-
-    <source-file src="src/wp/BLECentralPlugin.cs" />
-
-  </platform>
-  <!-- Windows universal apps (Windows 10) -->
-  <platform name="windows">
-    <js-module src="src/windows/win_ble.js" name="WinBleProxy">
-      <runs />
-    </js-module>
-    <config-file target="package.Windows10.appxmanifest" parent="/Package/Capabilities">
-      <DeviceCapability Name="bluetooth" />
-      <DeviceCapability Name="radios" />
-    </config-file>
-
-  </platform>
+  </platform>    
   <!-- because of <framework type="podspec"> for iOS -->
   <engines>
     <engine name="cordova" version=">=6.4.0"/>
