@@ -1,20 +1,17 @@
 {
   "name": "cordova-plugin-ble-npi",
-  "version": "1.1.8",
+  "version": "1.2.0",
   "description": "Bluetooth Low-Energy Communication Plugin",
   "cordova": {
     "id": "cordova-plugin-ble-npi",
     "platforms": [
       "android",
-      "ios",
-      "wp8",
-      "windows",
-      "browser"
+      "ios"
     ]
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/npinnovations/cordova-plugin-ble-npi.git"
+    "url": "git+https://github.com/nClarity/cordova-plugin-ble-npi.git"
   },
   "keywords": [
     "cordova",
@@ -25,10 +22,10 @@
     "nBlue",
     "ecosystem:cordova"
   ],
-  "author": "Avijeet Mishra <avijeet@npinnovations.com>",
+  "author": "nClarity",
   "license": "Apache-2.0",
   "bugs": {
-    "url": "https://github.com/npinnovations/cordova-plugin-ble-npi/issues"
+    "url": "https://github.com/nClarity/cordova-plugin-ble-npi/issues"
   },
-  "homepage": "https://github.com/npinnovations/cordova-plugin-ble-npi#readme"
+  "homepage": "https://github.com/nClarity/cordova-plugin-ble-npi#readme"
 }
